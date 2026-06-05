@@ -1,0 +1,4 @@
+Bu dizin, platforma özel paketlenmiş JRE 1.8'in yerleştirileceği yerdir.
+`pnpm fetch-jre` çalıştırıldığında Adoptium Temurin JRE 8 buraya indirilir ve
+normalize edilir (doğrudan bin/ ve lib/ içerir). JRE içeriği sürüm kontrolüne
+dahil edilmez; yalnızca bu .gitkeep dosyası izlenir.

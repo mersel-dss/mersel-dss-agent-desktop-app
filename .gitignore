@@ -1,0 +1,33 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Paketlenmiş JRE (build sırasında `pnpm fetch-jre` ile indirilir)
+src-tauri/resources/jre/*
+!src-tauri/resources/jre/.gitkeep
+
+# Tauri updater imza anahtarları (GİZLİ — repoya commit'lenmemeli)
+src-tauri/.tauri/
+*.key
+*.key.pub
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

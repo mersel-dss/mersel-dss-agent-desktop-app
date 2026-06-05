@@ -1,0 +1,83 @@
+name: Release
+
+# Sürüm etiketi push edildiğinde (örn. v0.1.0) her platformda installer + imzalı
+# updater artefaktları üretir ve bir GitHub Release'e (latest.json ile) yükler.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS (Apple Silicon) — JRE 8 aarch64 olmadığı için x64 (Rosetta) gömülür.
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+          # macOS (Intel)
+          - platform: macos-13
+            args: "--target x86_64-apple-darwin"
+          # Linux (Ubuntu) — .deb + .AppImage
+          - platform: ubuntu-22.04
+            args: ""
+          # Windows — NSIS
+          - platform: windows-latest
+            args: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux bağımlılıkları (webkit2gtk vb.)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || matrix.platform == 'macos-13' && 'x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Bağımlılıkları kur
+        run: pnpm install --frozen-lockfile
+
+      - name: Platforma özel JRE 1.8'i göm
+        run: pnpm fetch-jre
+
+      - name: Build + imzalı updater artefaktları + Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Mersel DSS Agent ${{ github.ref_name }}"
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}

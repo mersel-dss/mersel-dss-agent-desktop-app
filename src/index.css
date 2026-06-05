@@ -1,0 +1,278 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * Mersel DSS Agent — "Calm Flat" tasarım sistemi (2026).
+ * Tek light tema. Yön: düz (flat) yüzeyler, hairline kenarlıklar, keskin/net
+ * köşeler (küçük radius), gölge yerine ton farkıyla katman. Kart yoğunluğu
+ * yerine bölümleme + ayraç. Yumuşak, göz yormayan nötr palet üzerinde rafine
+ * Mersel turuncusu. shadcn token isimleri korunur; değerler yenilenmiştir.
+ */
+
+@theme inline {
+  /* shadcn köprüsü */
+  --color-background: rgb(var(--surface));
+  --color-foreground: rgb(var(--fg));
+  --color-card: rgb(var(--surface-overlay));
+  --color-card-foreground: rgb(var(--fg));
+  --color-popover: rgb(var(--surface-overlay));
+  --color-popover-foreground: rgb(var(--fg));
+  --color-primary: rgb(var(--accent));
+  --color-primary-foreground: rgb(var(--accent-fg));
+  --color-secondary: rgb(var(--surface-muted));
+  --color-secondary-foreground: rgb(var(--fg));
+  --color-muted: rgb(var(--surface-muted));
+  --color-muted-foreground: rgb(var(--fg-muted));
+  --color-accent: rgb(var(--surface-muted));
+  --color-accent-foreground: rgb(var(--fg));
+  --color-destructive: rgb(var(--tone-critical));
+  --color-destructive-foreground: rgb(255 255 255);
+  --color-success: rgb(var(--status-running));
+  --color-success-foreground: rgb(255 255 255);
+  --color-warning: rgb(var(--status-starting));
+  --color-warning-foreground: rgb(var(--tone-warning-fg));
+  --color-border: rgb(var(--border));
+  --color-input: rgb(var(--border));
+  --color-ring: rgb(var(--accent));
+
+  --color-sidebar: rgb(var(--sidebar));
+  --color-sidebar-foreground: rgb(var(--fg));
+  --color-sidebar-primary: rgb(var(--accent));
+  --color-sidebar-primary-foreground: rgb(var(--accent-fg));
+  --color-sidebar-accent: rgb(var(--accent-soft));
+  --color-sidebar-accent-foreground: rgb(var(--accent-hover));
+  --color-sidebar-border: rgb(var(--border));
+  --color-sidebar-ring: rgb(var(--accent));
+
+  /* Semantic chrome token'ları */
+  --color-surface: rgb(var(--surface));
+  --color-surface-muted: rgb(var(--surface-muted));
+  --color-surface-overlay: rgb(var(--surface-overlay));
+  --color-surface-raised: rgb(var(--surface-raised));
+  --color-fg: rgb(var(--fg));
+  --color-fg-muted: rgb(var(--fg-muted));
+  --color-fg-dim: rgb(var(--fg-dim));
+  --color-border-strong: rgb(var(--border-strong));
+  --color-brand: rgb(var(--accent));
+  --color-brand-soft: rgb(var(--accent-soft));
+  --color-brand-hover: rgb(var(--accent-hover));
+  --color-status-running: rgb(var(--status-running));
+  --color-status-stopped: rgb(var(--status-stopped));
+  --color-status-error: rgb(var(--status-error));
+  --color-status-starting: rgb(var(--status-starting));
+
+  /* Keskin/net köşe ölçeği — büyük değerler bile kasıtlı olarak sınırlı. */
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: var(--radius);
+  --radius-xl: 8px;
+  --radius-2xl: 10px;
+  --radius-3xl: 12px;
+
+  /* Flat tasarım: gölgeler minimuma indirildi. Katman ton farkı + hairline
+   * kenarlıkla kurulur. Belirgin gölge yalnızca yüzen yüzeylere (popover,
+   * dropdown, dialog) ayrılır. */
+  --shadow-2xs: 0 0 0 0 transparent;
+  --shadow-xs: 0 1px 0 0 rgb(23 26 31 / 0.03);
+  --shadow-sm: 0 1px 1px 0 rgb(23 26 31 / 0.04);
+  --shadow: 0 1px 2px 0 rgb(23 26 31 / 0.05);
+  --shadow-md: 0 4px 12px -3px rgb(23 26 31 / 0.08);
+  --shadow-lg: 0 10px 28px -8px rgb(23 26 31 / 0.12);
+  --shadow-xl: 0 20px 44px -14px rgb(23 26 31 / 0.16);
+  --shadow-brand: 0 1px 2px 0 rgb(23 26 31 / 0.06);
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono:
+    "JetBrains Mono", "SF Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-fade-up: fade-up 0.5s var(--ease-out-soft) both;
+  --animate-fade-in: fade-in 0.4s ease both;
+}
+
+:root {
+  /* Keskin/net taban köşe — düğme & giriş ~6px, paneller küçük radius. */
+  --radius: 0.4rem;
+
+  /* Soft, göz yormayan nötr yüzey katmanları.
+   * App zemini neredeyse beyaz (çok hafif serin tint); paneller saf beyaz →
+   * ayrım net hairline kenarlıkla kurulur. */
+  --surface: 252 253 254;
+  --surface-raised: 255 255 255;
+  --surface-muted: 243 245 247;
+  --surface-overlay: 255 255 255;
+
+  --border: 226 229 233;
+  --border-strong: 205 210 216;
+
+  /* Saf siyah yerine yumuşak mürekkep — kontrast yeterli, göz yormaz. */
+  --fg: 24 28 34;
+  --fg-muted: 91 99 110;
+  --fg-dim: 142 149 159;
+
+  /* Mersel marka turuncusu — kimlik korunur, biraz yumuşatıldı. */
+  --accent: 234 88 12;
+  --accent-hover: 194 65 12;
+  --accent-fg: 255 255 255;
+  --accent-soft: 255 238 224;
+
+  --sidebar: 252 253 254;
+
+  --status-running: 13 148 109;
+  --status-stopped: 113 120 130;
+  --status-error: 220 53 53;
+  --status-starting: 202 110 16;
+
+  --tone-critical: 220 53 53;
+  --tone-warning: 202 110 16;
+  --tone-warning-fg: 146 64 14;
+  --tone-success: 13 148 109;
+
+  color-scheme: light;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/40;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  /* Masaüstü yoğunluğu: taban tipografi 16px yerine 15px (rem ölçeği sıkışır). */
+  html {
+    font-size: 15px;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    font-feature-settings: "rlig" 1, "calt" 1, "tnum" 1, "ss01" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    letter-spacing: -0.011em;
+    /* Uygulama genelinde metin seçimi kapalı (masaüstü hissi). */
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Tamamen düz masaüstü zemini — gradient yok, sakin tek ton. */
+  #root {
+    background: rgb(var(--surface));
+  }
+
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Başlıklar: hafif sıkı tracking ile daha modern. */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+  }
+
+  /* Yalnızca form girişlerinde ve açıkça işaretlenen alanlarda seçim açık. */
+  input,
+  textarea,
+  select,
+  [contenteditable="true"],
+  [contenteditable=""],
+  .selectable,
+  .selectable * {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  /* İnce, zarif scrollbar. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--border-strong)) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--fg-dim) / 0.35);
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--fg-dim) / 0.6);
+  }
+}
+
+@layer components {
+  /* Düz chrome: opak yüzey, gölge/blur yok — yalnızca net hairline ayraçla
+   * gövdeden ayrılır. Glass yerine sakin, sabit zemin. */
+  .app-chrome {
+    background-color: rgb(var(--surface-raised));
+  }
+
+  /* Etkileşimli yüzey: flat tasarımda yükselme yerine kenarlık + zemin tonu
+   * değişir. Hareket minimum, sakin. */
+  .lift {
+    transition:
+      background-color 0.16s var(--ease-out-soft),
+      border-color 0.16s var(--ease-out-soft),
+      box-shadow 0.16s var(--ease-out-soft);
+  }
+  .lift:hover {
+    border-color: rgb(var(--border-strong));
+    background-color: rgb(var(--surface-raised));
+  }
+
+  /* İnce üst vurgu çizgisi — kart yerine bölüm ayrımı için kullanılabilir. */
+  .hairline-t {
+    border-top: 1px solid rgb(var(--border));
+  }
+
+  /* Panel: kart-yoğunluğuna alternatif düz yüzey. */
+  .panel {
+    background-color: rgb(var(--surface-raised));
+    border: 1px solid rgb(var(--border));
+    border-radius: var(--radius-lg);
+  }
+}
+
+@layer utilities {
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .page-enter > * {
+    animation: var(--animate-fade-up);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

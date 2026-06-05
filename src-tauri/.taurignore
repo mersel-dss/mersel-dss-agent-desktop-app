@@ -1,0 +1,8 @@
+# Tauri dev dosya-izleyicisi (cargo rebuild tetikleyen) için yok sayılacak yollar.
+# Sözdizimi .gitignore ile aynıdır.
+#
+# `resources/` çalışma zamanında doldurulur: yönetilen JRE indirilip buraya
+# açılır, Java servis jar'ları buraya yazılır. Bunlar Rust kaynağı değildir;
+# izlenirse her indirme yeniden derlemeyi tetikler ve indirme sürerken
+# yarıda kalan dosyalar "Permission denied (os error 13)" ile derlemeyi düşürür.
+resources/
