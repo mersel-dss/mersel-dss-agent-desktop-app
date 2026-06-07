@@ -16,7 +16,7 @@ export interface ServiceMeta {
 export const SERVICE_META: Record<ServiceKind, ServiceMeta> = {
   agent: {
     kind: "agent",
-    displayName: "Mersel İmza Ajanı",
+    displayName: "İmzalama Servisi",
     shortName: "İmza Ajanı",
     description:
       "Yereldeki mali mühür / e-imza karta erişir; PAdES ve XAdES imzalar üretir.",
@@ -25,7 +25,7 @@ export const SERVICE_META: Record<ServiceKind, ServiceMeta> = {
   },
   verifier: {
     kind: "verifier",
-    displayName: "Mersel Doğrulama Servisi",
+    displayName: "Doğrulama Servisi",
     shortName: "Doğrulama",
     description:
       "İmza ve zaman damgalarını DSS 6.3 ile doğrular; XAdES/PAdES/CAdES destekler.",

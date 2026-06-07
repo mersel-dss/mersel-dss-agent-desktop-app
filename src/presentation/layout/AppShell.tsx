@@ -7,6 +7,7 @@
 import { Outlet } from "react-router-dom";
 import { useServiceUpdates } from "@/application/services/useServiceUpdates";
 import { BootSplash } from "./BootSplash";
+import { StatusBar } from "./StatusBar";
 import { TopBar } from "./TopBar";
 
 export function AppShell() {
@@ -19,6 +20,7 @@ export function AppShell() {
       <main className="min-h-0 flex-1 overflow-hidden">
         <Outlet />
       </main>
+      <StatusBar />
       <BootSplash />
     </div>
   );

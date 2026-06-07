@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Mersel DSS Agent",
+  "productName": "Mersel İmzamatik",
   "version": "0.1.0",
   "identifier": "io.mersel.dss.agent.desktop",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Mersel DSS Agent",
+        "title": "Mersel İmzamatik",
         "width": 1180,
         "height": 780,
         "minWidth": 940,

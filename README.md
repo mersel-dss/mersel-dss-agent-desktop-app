@@ -1,6 +1,10 @@
-# Mersel DSS Agent Desktop
+# Mersel İmzamatik
+
+> **Mersel İmzamatik** — Türkiye'nin e-imza süreçleri için **Mersel** tarafından açık kaynak olarak geliştirilen masaüstü uygulaması. · [mersel.io](https://mersel.io)
 
 Yereldeki **mali mühür / e-imza** kartına erişen [imza ajanını](https://github.com/mersel-dss/mersel-dss-agent-signer-java) ve [doğrulama servisini](https://github.com/mersel-dss/mersel-dss-verifier-api-java) otomatik indirip çalıştıran, e-belge **imzalama** ve **doğrulama** süreçlerini tek arayüzde toplayan açık kaynak masaüstü uygulaması.
+
+İmzalama gücü Mersel'in, kullanım kolaylığı sizin: kart tak, sertifikanı seç, PIN'i yalnız imza anında gir — gerisini İmzamatik halleder.
 
 > Tauri 2 · React 19 · TypeScript · Tailwind v4 · shadcn/ui · Clean Architecture
 

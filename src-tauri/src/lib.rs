@@ -1,4 +1,4 @@
-//! Mersel DSS Agent Desktop — Tauri uygulama giriş noktası.
+//! Mersel İmzamatik — Tauri uygulama giriş noktası.
 //! Java imza/doğrulama servislerini yönetir ve frontend'e komut köprüsü sağlar.
 
 mod commands;

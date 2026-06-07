@@ -2,11 +2,11 @@
 @import "tw-animate-css";
 
 /*
- * Mersel DSS Agent — "Calm Flat" tasarım sistemi (2026).
+ * Mersel İmzamatik — "Calm Flat" tasarım sistemi (2026).
  * Tek light tema. Yön: düz (flat) yüzeyler, hairline kenarlıklar, keskin/net
  * köşeler (küçük radius), gölge yerine ton farkıyla katman. Kart yoğunluğu
  * yerine bölümleme + ayraç. Yumuşak, göz yormayan nötr palet üzerinde rafine
- * Mersel turuncusu. shadcn token isimleri korunur; değerler yenilenmiştir.
+ * Mersel moru (resmî logo rengi). shadcn token isimleri korunur; değerler yenilenmiştir.
  */
 
 @theme inline {
@@ -113,11 +113,11 @@
   --fg-muted: 91 99 110;
   --fg-dim: 142 149 159;
 
-  /* Mersel marka turuncusu — kimlik korunur, biraz yumuşatıldı. */
-  --accent: 234 88 12;
-  --accent-hover: 194 65 12;
+  /* Mersel marka moru — resmî logo rengiyle (#705FA4 → #A08FBF) hizalı. */
+  --accent: 112 95 164;
+  --accent-hover: 88 73 132;
   --accent-fg: 255 255 255;
-  --accent-soft: 255 238 224;
+  --accent-soft: 238 234 247;
 
   --sidebar: 252 253 254;
 

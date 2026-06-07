@@ -1,7 +1,7 @@
 /**
  * Birleşik üst uygulama çubuğu (single app bar): solda trafik-ışığı boşluğu +
- * marka, ortada yatay gezinme (aktif öğe alt-çizgi göstergesiyle), sağda arama,
- * servis durumu ve sürüm. Tamamı sürüklenebilir pencere taşıma bölgesidir.
+ * marka, ortada yatay gezinme (aktif öğe alt-çizgi göstergesiyle), sağda yalnız
+ * (gerekiyorsa) güncelleme butonu. Tamamı sürüklenebilir pencere taşıma bölgesi.
  */
 
 import { NavLink } from "react-router-dom";
@@ -12,18 +12,14 @@ import {
   FileSignature,
   LayoutDashboard,
   Loader2,
-  Search,
   ShieldCheck,
-  Tag,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { errorMessage } from "@/shared/lib/errors";
-import { useServiceHealth } from "@/application/services/hooks";
 import { useAppUpdate } from "@/application/update/hooks";
+import { MerselWordmark } from "@/presentation/components/brand/MerselLogo";
 import { cn } from "@/shared/lib/utils";
-
-const APP_VERSION = "v0.1.0";
 
 interface NavItem {
   to: string;
@@ -79,46 +75,6 @@ function NavLinks({ items }: { items: NavItem[] }) {
   );
 }
 
-function StatusPill() {
-  const { total, running, allRunning, anyRunning } = useServiceHealth();
-
-  const tone = allRunning
-    ? "text-status-running"
-    : anyRunning
-      ? "text-[rgb(var(--tone-warning-fg))]"
-      : "text-fg-dim";
-  const dot = allRunning
-    ? "bg-status-running"
-    : anyRunning
-      ? "bg-status-starting"
-      : "bg-fg-dim";
-  const label =
-    total === 0
-      ? "Servisler bekleniyor"
-      : allRunning
-        ? "Tüm servisler çalışıyor"
-        : anyRunning
-          ? `${running}/${total} servis`
-          : "Servisler durduruldu";
-
-  return (
-    <div className="hidden items-center gap-1.5 rounded-md border border-border bg-surface-muted px-2.5 py-1 text-[11.5px] font-medium md:flex">
-      <span className="relative flex h-2 w-2">
-        {running > 0 ? (
-          <span
-            className={cn(
-              "absolute inline-flex h-full w-full animate-ping rounded-full opacity-60",
-              dot,
-            )}
-          />
-        ) : null}
-        <span className={cn("relative inline-flex h-2 w-2 rounded-full", dot)} />
-      </span>
-      <span className={cn("whitespace-nowrap", tone)}>{label}</span>
-    </div>
-  );
-}
-
 /** Yalnızca yeni bir uygulama sürümü mevcutsa görünen güncelle butonu. */
 function UpdateButton() {
   const { info, install } = useAppUpdate();
@@ -156,16 +112,11 @@ export function TopBar() {
   return (
     <header
       data-tauri-drag-region
-      className="app-chrome flex h-12 shrink-0 items-stretch gap-1 border-b border-border pr-3 pl-[78px]"
+      className="app-chrome flex h-11 shrink-0 items-stretch gap-1 border-b border-border pr-3 pl-[78px]"
     >
-      {/* Marka */}
-      <div className="flex shrink-0 items-center gap-2 pr-3">
-        <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[5px] bg-primary text-[11px] font-bold text-primary-foreground">
-          M
-        </span>
-        <span className="hidden whitespace-nowrap text-[13px] font-semibold text-fg lg:inline">
-          Mersel DSS
-        </span>
+      {/* Marka — resmî mersel logosu + İmzamatik */}
+      <div className="flex shrink-0 items-center pr-3">
+        <MerselWordmark height={17} suffixClassName="hidden lg:inline" />
       </div>
 
       <span aria-hidden className="my-2.5 w-px shrink-0 bg-border" />
@@ -180,29 +131,9 @@ export function TopBar() {
         <NavLinks items={SECONDARY_NAV_ITEMS} />
       </nav>
 
-      <span aria-hidden className="my-2.5 w-px shrink-0 bg-border" />
-
-      {/* Sağ: arama · durum · sürüm */}
-      <div className="flex shrink-0 items-center gap-2">
-        <button
-          type="button"
-          className="hidden items-center gap-2 rounded-md border border-border bg-surface-muted py-1 pr-1.5 pl-2.5 text-[12px] text-fg-dim transition-colors hover:border-border-strong hover:text-fg-muted sm:flex"
-        >
-          <Search className="h-3.5 w-3.5" />
-          <span>Ara…</span>
-          <kbd className="rounded-sm border border-border bg-surface-raised px-1 py-px font-sans text-[10px] font-medium text-fg-dim">
-            ⌘K
-          </kbd>
-        </button>
-
-        <StatusPill />
-
+      {/* Sağ: yalnızca güncelleme mevcutsa görünür */}
+      <div className="flex shrink-0 items-center pl-1">
         <UpdateButton />
-
-        <span className="flex items-center gap-1 rounded-sm bg-brand-soft px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-brand-hover">
-          <Tag className="h-2.5 w-2.5" />
-          {APP_VERSION}
-        </span>
       </div>
     </header>
   );

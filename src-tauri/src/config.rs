@@ -20,7 +20,7 @@ pub struct ServiceDescriptor {
 
 pub const AGENT: ServiceDescriptor = ServiceDescriptor {
     kind: ServiceKind::Agent,
-    display_name: "Mersel İmza Ajanı",
+    display_name: "İmzalama Servisi",
     repo_owner: "mersel-dss",
     repo_name: "mersel-dss-agent-signer-java",
     jar_prefix: "mersel-dss-agent-signer-api",
@@ -29,7 +29,7 @@ pub const AGENT: ServiceDescriptor = ServiceDescriptor {
 
 pub const VERIFIER: ServiceDescriptor = ServiceDescriptor {
     kind: ServiceKind::Verifier,
-    display_name: "Mersel Doğrulama Servisi",
+    display_name: "Doğrulama Servisi",
     repo_owner: "mersel-dss",
     repo_name: "mersel-dss-verifier-api-java",
     // Release asset adı "mersel-dss-verify-api-<sürüm>.jar" (verify, verifier değil).

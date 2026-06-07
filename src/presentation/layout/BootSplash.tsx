@@ -29,6 +29,8 @@ import {
   type BootStepId,
   type BootStepStatus,
 } from "@/application/services/useBootPreparation";
+import { BRAND } from "@/shared/brand";
+import { MerselMark } from "@/presentation/components/brand/MerselLogo";
 import { cn } from "@/shared/lib/utils";
 
 const MIN_VISIBLE_MS = 1300;
@@ -106,17 +108,20 @@ export function BootSplash() {
 
       <div className="relative z-10 flex w-full max-w-md flex-col items-center px-8 [animation:var(--animate-fade-up)]">
         {/* Marka madalyonu + dönen halka */}
-        <div className="relative mb-7 flex h-20 w-20 items-center justify-center">
+        <div className="relative mb-6 flex h-20 w-20 items-center justify-center">
           <span
             aria-hidden
             className="absolute inset-0 rounded-2xl border-2 border-brand/25 border-t-brand [animation:spin_1.1s_linear_infinite]"
           />
-          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary text-[22px] font-bold text-primary-foreground shadow-md">
-            M
+          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-surface-raised shadow-sm ring-1 ring-border">
+            <MerselMark className="h-9 w-9" />
           </span>
         </div>
 
-        <h1 className="text-center text-[19px] font-semibold tracking-tight text-fg">
+        <p className="text-center text-[12px] font-semibold uppercase tracking-[0.18em] text-brand-hover">
+          {BRAND.product}
+        </p>
+        <h1 className="mt-1 text-center text-[19px] font-semibold tracking-tight text-fg">
           Çalışma alanınız hazırlanıyor
         </h1>
         <p className="mt-1.5 max-w-xs text-center text-[13px] leading-relaxed text-fg-muted">
