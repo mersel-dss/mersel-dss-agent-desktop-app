@@ -21,7 +21,7 @@ export function VerifyPage() {
 
   if (!isRunning) {
     return (
-      <div className="flex h-full items-center justify-center p-6">
+      <div className="page-enter flex h-full items-center justify-center px-5 py-5">
         <ServiceOfflineNotice
           title="Doğrulama servisi çalışmıyor"
           description="Doğrulama yapabilmek için önce Genel Bakış'tan doğrulama servisini başlatın."
@@ -31,7 +31,7 @@ export function VerifyPage() {
   }
 
   return (
-    <div className="h-full p-5">
+    <div className="page-enter h-full px-5 py-5">
       <Tabs
         defaultValue="signature"
         className="flex h-full min-h-0 flex-col gap-0"
