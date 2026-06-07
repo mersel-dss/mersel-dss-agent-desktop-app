@@ -4,6 +4,7 @@
 mod commands;
 mod config;
 mod download;
+mod envelope;
 mod error;
 mod http;
 mod java;
@@ -44,6 +45,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::system::detect_java,
+            commands::system::list_app_releases,
             commands::services::list_services,
             commands::services::start_service,
             commands::services::stop_service,
@@ -57,7 +59,7 @@ pub fn run() {
             commands::virtualcards::register_pkcs11_virtual_card,
             commands::virtualcards::register_pkcs12_virtual_card,
             commands::virtualcards::remove_virtual_card,
-            commands::verification::verify_signature,
+            commands::verification::verify_document,
             commands::verification::verify_timestamp,
             commands::diagnostics::list_traces,
             commands::diagnostics::clear_traces,

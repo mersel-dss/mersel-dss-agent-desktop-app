@@ -12,12 +12,19 @@ import { AlertList } from "@/presentation/components/common/AlertList";
 import { SignatureTree } from "./components/SignatureTree";
 import { SignatureDetailPanel } from "./components/SignatureDetailPanel";
 import { VerdictHero } from "./components/VerdictHero";
+import { DocumentIdentity } from "./components/DocumentIdentity";
 import { signatureTypeLabel } from "./labels";
 
 export function SignatureResultView({
   result,
+  documentId,
+  uuid,
 }: {
   result: SignatureVerificationResult;
+  /** Belge numarası (UBL `cbc:ID`) — varsa kimlik şeridinde gösterilir. */
+  documentId?: string | null;
+  /** ETTN (UBL `cbc:UUID`) — varsa kimlik şeridinde gösterilir. */
+  uuid?: string | null;
 }) {
   const signatures = result.signatures ?? [];
   const ok = result.valid === true;
@@ -40,6 +47,8 @@ export function SignatureResultView({
           { label: "Doğrulama", value: formatDate(result.verificationTime) },
         ]}
       />
+
+      <DocumentIdentity documentId={documentId} uuid={uuid} />
 
       <AlertList items={result.errors} tone="error" />
       <AlertList items={result.warnings} tone="warning" />

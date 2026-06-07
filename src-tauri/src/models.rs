@@ -95,6 +95,27 @@ pub struct ReleaseInfo {
     pub jar_asset: Option<ReleaseAsset>,
 }
 
+/// Bir GitHub release'inin sürüm notu (changelog) girdisi. Gövde (`body`)
+/// GitHub Markdown'ı olarak gelir ve frontend'de render edilir.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangelogEntry {
+    /// Sürüm etiketi (örn. `v0.2.0`).
+    pub tag: String,
+    /// Release başlığı (varsa; çoğu zaman etiketle aynı).
+    pub name: Option<String>,
+    /// Markdown gövdesi (sürüm notları).
+    pub body: Option<String>,
+    /// Yayın tarihi (ISO-8601).
+    pub published_at: Option<String>,
+    /// GitHub'daki release sayfası.
+    pub html_url: Option<String>,
+    /// Ön sürüm (pre-release) mi?
+    pub prerelease: bool,
+    /// Henüz yayınlanmamış taslak mı?
+    pub draft: bool,
+}
+
 /// İndirme ilerleme olayı (event ile yayınlanır).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

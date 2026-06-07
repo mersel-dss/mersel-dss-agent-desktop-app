@@ -10,6 +10,7 @@ import type { VerificationGateway } from "@/domain/verification/ports";
 import type { DiagnosticsGateway } from "@/domain/diagnostics/ports";
 import type { FileGateway } from "@/domain/platform/ports";
 import type { UpdaterGateway } from "@/domain/update/ports";
+import type { ChangelogGateway } from "@/domain/changelog/ports";
 
 import { TauriServiceGateway } from "@/infrastructure/tauri/serviceGateway";
 import { TauriSigningGateway } from "@/infrastructure/tauri/signingGateway";
@@ -18,6 +19,7 @@ import { TauriVerificationGateway } from "@/infrastructure/tauri/verificationGat
 import { TauriDiagnosticsGateway } from "@/infrastructure/tauri/diagnosticsGateway";
 import { TauriFileGateway } from "@/infrastructure/tauri/fileGateway";
 import { TauriUpdaterGateway } from "@/infrastructure/tauri/updaterGateway";
+import { TauriChangelogGateway } from "@/infrastructure/tauri/changelogGateway";
 
 export interface Container {
   services: ServiceGateway;
@@ -27,6 +29,7 @@ export interface Container {
   diagnostics: DiagnosticsGateway;
   files: FileGateway;
   updater: UpdaterGateway;
+  changelog: ChangelogGateway;
 }
 
 export const container: Container = {
@@ -37,4 +40,5 @@ export const container: Container = {
   diagnostics: new TauriDiagnosticsGateway(),
   files: new TauriFileGateway(),
   updater: new TauriUpdaterGateway(),
+  changelog: new TauriChangelogGateway(),
 };

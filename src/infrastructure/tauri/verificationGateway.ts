@@ -4,18 +4,18 @@
 
 import type { VerificationGateway } from "@/domain/verification/ports";
 import type {
-  SignatureVerificationResult,
+  DocumentVerificationResult,
   TimestampVerificationResult,
-  VerifySignatureRequest,
+  VerifyDocumentRequest,
   VerifyTimestampRequest,
 } from "@/domain/verification/types";
 import { call } from "./client";
 
 export class TauriVerificationGateway implements VerificationGateway {
-  verifySignature(
-    request: VerifySignatureRequest,
-  ): Promise<SignatureVerificationResult> {
-    return call<SignatureVerificationResult>("verify_signature", {
+  verifyDocument(
+    request: VerifyDocumentRequest,
+  ): Promise<DocumentVerificationResult> {
+    return call<DocumentVerificationResult>("verify_document", {
       signedPath: request.signedPath,
       originalPath: request.originalPath ?? null,
       level: request.level ?? "COMPREHENSIVE",

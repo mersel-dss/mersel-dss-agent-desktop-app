@@ -1,18 +1,22 @@
 /**
- * İmza doğrulama çalışma yüzeyi: solda doküman/ayar girdisi, sağda sonuç.
+ * Doküman doğrulama çalışma yüzeyi. Tek ekran: kullanıcı bir dosya verir,
+ * sistem **e-Belge zarfını (StandardBusinessDocument) otomatik tespit eder**.
+ * Zarfsa içindeki tüm imzalı belgeler çözülüp tek tek doğrulanır; değilse
+ * tekil imza (XAdES/PAdES/CAdES) doğrulaması yapılır. Solda girdi, sağda sonuç.
  */
 
 import { useState } from "react";
-import { FileSignature, ShieldCheck } from "lucide-react";
+import { FileSearch, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { errorMessage } from "@/shared/lib/errors";
-import { useVerifySignature } from "@/application/verification/hooks";
+import { useVerifyDocument } from "@/application/verification/hooks";
 import type { VerificationLevel } from "@/domain/verification/types";
 import { Button } from "@/presentation/components/ui/button";
 import { Label } from "@/presentation/components/ui/label";
 import { IconMedallion } from "@/presentation/components/common/IconMedallion";
 import { FileDropField } from "@/presentation/components/common/FileDropField";
 import { SignatureResultView } from "./SignatureResultView";
+import { EnvelopeResultView } from "./EnvelopeResultView";
 import {
   ResultLoading,
   ResultPlaceholder,
@@ -20,8 +24,8 @@ import {
   WorkspaceLayout,
 } from "./components/Workspace";
 
-export function VerifySignatureForm() {
-  const verify = useVerifySignature();
+export function VerifyDocumentForm() {
+  const verify = useVerifyDocument();
   const [signedPath, setSignedPath] = useState<string | null>(null);
   const [originalPath, setOriginalPath] = useState<string | null>(null);
   const [level, setLevel] = useState<VerificationLevel>("COMPREHENSIVE");
@@ -50,20 +54,20 @@ export function VerifySignatureForm() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <IconMedallion size="lg" dashed>
-          <FileSignature className="h-5 w-5" />
+          <FileSearch className="h-5 w-5" />
         </IconMedallion>
         <div>
           <h2 className="text-sm font-semibold">İmzalı Doküman</h2>
           <p className="text-xs text-muted-foreground">
-            XAdES · PAdES · CAdES
+            XAdES · PAdES · CAdES · e-Belge zarfı
           </p>
         </div>
       </div>
 
       <div className="space-y-4 border-t border-dashed border-border/70 pt-5">
         <FileDropField
-          label="İmzalı doküman"
-          hint="XML, PDF veya imza dosyası"
+          label="Doküman"
+          hint="İmza dosyası ya da e-Belge zarfı (SBD)"
           value={signedPath}
           onChange={setSignedPath}
         />
@@ -74,6 +78,10 @@ export function VerifySignatureForm() {
           onChange={setOriginalPath}
           optional
         />
+        <p className="text-[11.5px] leading-relaxed text-fg-dim">
+          Verdiğiniz dosya bir e-Belge zarfıysa (StandardBusinessDocument)
+          otomatik çözülür; içindeki tüm imzalı belgeler tek tek doğrulanır.
+        </p>
       </div>
 
       <div className="space-y-2 border-t border-dashed border-border/70 pt-5">
@@ -105,16 +113,31 @@ export function VerifySignatureForm() {
     </div>
   );
 
+  const data = verify.data;
   const result = verify.isPending ? (
     <ResultLoading />
-  ) : verify.data ? (
-    <SignatureResultView result={verify.data} />
+  ) : data ? (
+    data.kind === "envelope" && data.envelope ? (
+      <EnvelopeResultView result={data.envelope} />
+    ) : data.signature ? (
+      <SignatureResultView
+        result={data.signature}
+        documentId={data.documentId}
+        uuid={data.uuid}
+      />
+    ) : (
+      <ResultPlaceholder
+        icon={<ShieldCheck className="h-7 w-7" />}
+        title="Sonuç çözümlenemedi"
+        description="Doğrulama servisi beklenen biçimde yanıt vermedi. Lütfen tekrar deneyin."
+      />
+    )
   ) : (
     <ResultPlaceholder
-      icon={<ShieldCheck className="h-7 w-7" />}
+      icon={<FileSearch className="h-7 w-7" />}
       title="Doğrulama sonucu burada görünecek"
-      description="Soldan imzalı bir doküman seçip “Doğrula”ya basın. İmza ağacı, sertifika zinciri ve adım-adım kontroller bu alanda listelenir."
-      highlights={["XAdES", "PAdES", "CAdES", "Zaman damgası", "Sertifika zinciri"]}
+      description="Soldan bir imzalı doküman ya da e-Belge zarfı seçip “Doğrula”ya basın. Zarf otomatik tespit edilip içindeki tüm belgeler çözülür; sonra imza ağacı, sertifika zinciri ve adım-adım kontroller listelenir."
+      highlights={["Otomatik zarf tespiti", "XAdES", "PAdES", "CAdES", "Çoklu belge", "Sertifika zinciri"]}
     />
   );
 

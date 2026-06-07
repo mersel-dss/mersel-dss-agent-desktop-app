@@ -9,6 +9,7 @@ import { SignPage } from "@/presentation/pages/SignPage";
 import { VirtualCardsPage } from "@/presentation/pages/VirtualCardsPage";
 import { VerifyPage } from "@/presentation/pages/VerifyPage";
 import { DiagnosticsPage } from "@/presentation/pages/DiagnosticsPage";
+import { ChangelogPage } from "@/presentation/pages/ChangelogPage";
 
 export const router = createHashRouter([
   {
@@ -19,6 +20,7 @@ export const router = createHashRouter([
       { path: "virtual-cards", element: <VirtualCardsPage /> },
       { path: "verify", element: <VerifyPage /> },
       { path: "diagnostics", element: <DiagnosticsPage /> },
+      { path: "changelog", element: <ChangelogPage /> },
     ],
   },
 ]);

@@ -5,6 +5,11 @@ use crate::models::ServiceKind;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
+/// Masaüstü uygulamasının kendi GitHub deposu (sürüm notları / changelog
+/// buradan okunur). Updater endpoint'i de aynı depoya işaret eder.
+pub const APP_REPO_OWNER: &str = "mersel-dss";
+pub const APP_REPO_NAME: &str = "mersel-dss-agent-desktop-app";
+
 /// Bir Java servisinin statik tanımı.
 #[derive(Debug, Clone)]
 pub struct ServiceDescriptor {

@@ -5,14 +5,14 @@
 import { useMutation } from "@tanstack/react-query";
 import { container } from "@/app/container";
 import type {
-  VerifySignatureRequest,
+  VerifyDocumentRequest,
   VerifyTimestampRequest,
 } from "@/domain/verification/types";
 
-export function useVerifySignature() {
+export function useVerifyDocument() {
   return useMutation({
-    mutationFn: (request: VerifySignatureRequest) =>
-      container.verification.verifySignature(request),
+    mutationFn: (request: VerifyDocumentRequest) =>
+      container.verification.verifyDocument(request),
   });
 }
 

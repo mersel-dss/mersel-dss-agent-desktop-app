@@ -213,6 +213,62 @@ export interface VerifySignatureRequest {
   includeFailedConstraints?: boolean;
 }
 
+/** e-Belge zarfından çıkarılıp doğrulanan tek bir imzalı belgenin sonucu. */
+export interface EnvelopeDocumentResult {
+  /** Zarf içindeki sıra (0 tabanlı). */
+  index: number;
+  /** Çevreleyen `Elements` bloğundaki `ElementType` (örn. `INVOICE`), varsa. */
+  elementType?: string | null;
+  /** Çıkarılan kök elemanın yerel adı (örn. `Invoice`). */
+  rootElementName: string;
+  /** Belge numarası — UBL kök seviyesindeki `cbc:ID` (varsa). */
+  documentId?: string | null;
+  /** ETTN — UBL kök seviyesindeki `cbc:UUID` (varsa). */
+  uuid?: string | null;
+  /** Doğrulama raporu. Doğrulama hata verdiyse `null`. */
+  result?: SignatureVerificationResult | null;
+  /** Bu belge doğrulanamadıysa hata mesajı. */
+  error?: string | null;
+}
+
+/** Zarf doğrulamanın birleşik özeti. */
+export interface EnvelopeVerificationResult {
+  /** Zarf içinde tespit edilen imzalı belge sayısı. */
+  documentCount: number;
+  /** Geçerli olarak doğrulanan belge sayısı. */
+  validCount: number;
+  /** Her bir belgenin doğrulama sonucu. */
+  documents: EnvelopeDocumentResult[];
+}
+
+/** Birleşik doküman doğrulama sonucu: dosya türüne göre zarf ya da tekil imza. */
+export interface DocumentVerificationResult {
+  /** `envelope`: SBD zarfı otomatik çözüldü · `signature`: tekil imzalı doküman. */
+  kind: "envelope" | "signature";
+  /** Zarf çözümlemesinin özeti (yalnızca `kind === "envelope"`). */
+  envelope?: EnvelopeVerificationResult | null;
+  /** Tekil imza doğrulama raporu (yalnızca `kind === "signature"`). */
+  signature?: SignatureVerificationResult | null;
+  /** Belge numarası — UBL kök seviyesindeki `cbc:ID` (tekil belgede, varsa). */
+  documentId?: string | null;
+  /** ETTN — UBL kök seviyesindeki `cbc:UUID` (tekil belgede, varsa). */
+  uuid?: string | null;
+}
+
+/**
+ * Doküman doğrulama isteği. Dosya bir e-Belge zarfıysa (StandardBusinessDocument)
+ * otomatik tespit edilip içindeki tüm imzalı belgeler doğrulanır; değilse tekil
+ * imza doğrulaması yapılır.
+ */
+export interface VerifyDocumentRequest {
+  signedPath: string;
+  /** Ayrık (detached) imza için orijinal doküman (tekil imzalarda). */
+  originalPath?: string;
+  level?: VerificationLevel;
+  /** Tüm FAIL constraint'lerini (audit/forensic) iste. */
+  includeFailedConstraints?: boolean;
+}
+
 /** Zaman damgası doğrulama isteği. */
 export interface VerifyTimestampRequest {
   timestampPath: string;

@@ -43,8 +43,17 @@ pub(crate) async fn file_part(
         .and_then(|n| n.to_str())
         .unwrap_or("file")
         .to_string();
+    bytes_part(bytes, file_name)
+}
+
+/// Bellekteki baytları multipart `Part` olarak yükler (octet-stream).
+/// Zarf içinden çıkarılan imzalı belgeleri diske yazmadan göndermek için.
+pub(crate) fn bytes_part(
+    bytes: Vec<u8>,
+    file_name: impl Into<String>,
+) -> AppResult<reqwest::multipart::Part> {
     reqwest::multipart::Part::bytes(bytes)
-        .file_name(file_name)
+        .file_name(file_name.into())
         .mime_str("application/octet-stream")
         .map_err(AppError::from)
 }

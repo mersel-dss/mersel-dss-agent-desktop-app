@@ -2,7 +2,7 @@
 
 use crate::config::ServiceDescriptor;
 use crate::error::{AppError, AppResult};
-use crate::models::{ReleaseAsset, ReleaseInfo};
+use crate::models::{ChangelogEntry, ReleaseAsset, ReleaseInfo};
 use futures_util::StreamExt;
 use std::path::Path;
 use tokio::io::AsyncWriteExt;
@@ -75,6 +75,61 @@ fn parse_release(json: &serde_json::Value, descriptor: &ServiceDescriptor) -> Re
         published_at,
         jar_asset,
     }
+}
+
+/// Bir deponun yayınlanmış release'lerini (en yeniden eskiye) listeler ve
+/// sürüm notu (changelog) girdilerine çevirir. Taslaklar elenir.
+pub async fn list_releases(
+    owner: &str,
+    name: &str,
+    per_page: u32,
+) -> AppResult<Vec<ChangelogEntry>> {
+    let url = format!(
+        "https://api.github.com/repos/{owner}/{name}/releases?per_page={per_page}"
+    );
+    let resp = client()?
+        .get(&url)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await?;
+    if !resp.status().is_success() {
+        return Err(AppError::ServiceResponse {
+            status: resp.status().as_u16(),
+            body: "GitHub sürüm notları alınamadı".to_string(),
+        });
+    }
+    let json: serde_json::Value = resp.json().await?;
+    let entries = json
+        .as_array()
+        .map(|arr| arr.iter().filter_map(parse_changelog_entry).collect())
+        .unwrap_or_default();
+    Ok(entries)
+}
+
+fn parse_changelog_entry(json: &serde_json::Value) -> Option<ChangelogEntry> {
+    // Taslakları (henüz yayınlanmamış) atla.
+    if json.get("draft").and_then(|v| v.as_bool()).unwrap_or(false) {
+        return None;
+    }
+    let tag = json.get("tag_name").and_then(|v| v.as_str())?.to_string();
+    let str_field = |key: &str| {
+        json.get(key)
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+    };
+    Some(ChangelogEntry {
+        tag,
+        name: str_field("name"),
+        body: str_field("body"),
+        published_at: str_field("published_at"),
+        html_url: str_field("html_url"),
+        prerelease: json
+            .get("prerelease")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        draft: false,
+    })
 }
 
 /// Bir asset'i hedef dosyaya stream ederek indirir. İlerleme `on_progress` ile bildirilir.

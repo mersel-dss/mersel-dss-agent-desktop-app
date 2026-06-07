@@ -7,14 +7,14 @@
  * tarafından geliştirilir ve bu şerit o emeğin görünürlüğünü taşır.
  */
 
+import { useNavigate } from "react-router-dom";
 import { GitBranch, Heart, Tag } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { BRAND } from "@/shared/brand";
 import { useServiceHealth } from "@/application/services/hooks";
+import { useAppVersion } from "@/application/changelog/hooks";
 import { MerselLogotype } from "@/presentation/components/brand/MerselLogo";
 import { cn } from "@/shared/lib/utils";
-
-const APP_VERSION = "v0.1.0";
 
 function LiveStatus() {
   const { total, running, allRunning, anyRunning } = useServiceHealth();
@@ -57,6 +57,10 @@ function LiveStatus() {
 }
 
 export function StatusBar() {
+  const navigate = useNavigate();
+  const { data: version } = useAppVersion();
+  const appVersion = version ? `v${version.replace(/^v/i, "")}` : "v0.1.0";
+
   return (
     <footer
       data-tauri-drag-region
@@ -97,14 +101,16 @@ export function StatusBar() {
 
         <span aria-hidden className="h-3 w-px bg-border" />
 
-        {/* Sürüm — sağ en alt köşe */}
-        <span
-          title={`${BRAND.product} ${APP_VERSION}`}
-          className="flex items-center gap-1 whitespace-nowrap font-mono text-[10.5px] font-medium text-fg-dim"
+        {/* Sürüm — sağ en alt köşe; tıklanınca sürüm notlarını açar */}
+        <button
+          type="button"
+          onClick={() => navigate("/changelog")}
+          title={`${BRAND.product} ${appVersion} — sürüm notlarını gör`}
+          className="flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 font-mono text-[10.5px] font-medium text-fg-dim transition-colors hover:bg-surface-muted hover:text-fg-muted"
         >
           <Tag className="h-2.5 w-2.5" />
-          {APP_VERSION}
-        </span>
+          {appVersion}
+        </button>
       </div>
     </footer>
   );

@@ -1,7 +1,7 @@
 //! Doğrulama servisi (port 8086) REST istemcisi.
 //! İmza ve zaman damgası doğrulama.
 
-use super::{base_url, ensure_success, file_part, long_client};
+use super::{base_url, bytes_part, ensure_success, file_part, long_client};
 use crate::error::AppResult;
 use std::path::Path;
 
@@ -17,16 +17,44 @@ pub async fn verify_signature(
     level: &str,
     include_failed_constraints: bool,
 ) -> AppResult<serde_json::Value> {
+    let signed = file_part(signed_path).await?;
+    let original = match original_path {
+        Some(p) => Some(file_part(p).await?),
+        None => None,
+    };
+    verify_signature_part(port, signed, original, level, include_failed_constraints).await
+}
+
+/// Bellekteki imzalı içeriği doğrular (diske yazmadan). Zarf içinden çıkarılan
+/// belgeleri tek tek doğrulamak için kullanılır.
+pub async fn verify_signature_bytes(
+    port: u16,
+    signed_bytes: Vec<u8>,
+    file_name: &str,
+    level: &str,
+    include_failed_constraints: bool,
+) -> AppResult<serde_json::Value> {
+    let signed = bytes_part(signed_bytes, file_name)?;
+    verify_signature_part(port, signed, None, level, include_failed_constraints).await
+}
+
+async fn verify_signature_part(
+    port: u16,
+    signed: reqwest::multipart::Part,
+    original: Option<reqwest::multipart::Part>,
+    level: &str,
+    include_failed_constraints: bool,
+) -> AppResult<serde_json::Value> {
     let mut form = reqwest::multipart::Form::new()
-        .part("signedDocument", file_part(signed_path).await?)
+        .part("signedDocument", signed)
         .text("level", level.to_string())
         .text(
             "includeFailedConstraints",
             include_failed_constraints.to_string(),
         );
 
-    if let Some(original) = original_path {
-        form = form.part("originalDocument", file_part(original).await?);
+    if let Some(original) = original {
+        form = form.part("originalDocument", original);
     }
 
     let url = format!("{}/api/v1/verify/signature", base_url(port));

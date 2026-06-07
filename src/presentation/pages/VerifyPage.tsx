@@ -13,7 +13,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/presentation/components/ui/tabs";
-import { VerifySignatureForm } from "@/presentation/features/verify/VerifySignatureForm";
+import { VerifyDocumentForm } from "@/presentation/features/verify/VerifyDocumentForm";
 import { VerifyTimestampForm } from "@/presentation/features/verify/VerifyTimestampForm";
 
 export function VerifyPage() {
@@ -42,7 +42,7 @@ export function VerifyPage() {
             Doğrula
           </h1>
           <p className="truncate text-[11.5px] leading-tight text-fg-dim">
-            İmza ve zaman damgası geçerliliği
+            İmza, e-Belge zarfı ve zaman damgası geçerliliği
           </p>
         </div>
         <TabsList className="h-8 shrink-0">
@@ -57,7 +57,7 @@ export function VerifyPage() {
         </TabsList>
       </div>
         <TabsContent value="signature" className="min-h-0 flex-1">
-          <VerifySignatureForm />
+          <VerifyDocumentForm />
         </TabsContent>
         <TabsContent value="timestamp" className="min-h-0 flex-1">
           <VerifyTimestampForm />

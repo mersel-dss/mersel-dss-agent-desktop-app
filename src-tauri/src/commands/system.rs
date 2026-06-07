@@ -1,9 +1,10 @@
-//! Sistem seviyesi komutlar: Java tespiti, metin dosyası yazma.
+//! Sistem seviyesi komutlar: Java tespiti, metin dosyası yazma, sürüm notları.
 
 use crate::config;
+use crate::download::github;
 use crate::error::AppResult;
 use crate::java;
-use crate::models::JavaInfo;
+use crate::models::{ChangelogEntry, JavaInfo};
 use tauri::AppHandle;
 
 /// Makinedeki Java runtime'ı tespit eder. Önce uygulamayla paketlenmiş JRE'yi,
@@ -21,6 +22,14 @@ pub async fn detect_java(app: AppHandle) -> JavaInfo {
             source: None,
             bundled: false,
         })
+}
+
+/// Uygulamanın GitHub deposundaki sürüm notlarını (changelog) en yeniden
+/// eskiye listeler. Her girdinin gövdesi GitHub Markdown'ı olarak gelir ve
+/// frontend'de render edilir.
+#[tauri::command]
+pub async fn list_app_releases() -> AppResult<Vec<ChangelogEntry>> {
+    github::list_releases(config::APP_REPO_OWNER, config::APP_REPO_NAME, 30).await
 }
 
 /// Verilen metni `path`'e UTF-8 olarak yazar (tanılama dışa aktarımı için).
