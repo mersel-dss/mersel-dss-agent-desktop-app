@@ -10,6 +10,7 @@ import { useSignPades, useSignXades } from "@/application/signing/hooks";
 import { useFiles } from "@/application/platform/hooks";
 import type { XadesContentType } from "@/domain/signing/types";
 import { basename } from "@/shared/lib/format";
+import { errorMessage } from "@/shared/lib/errors";
 import { Button } from "@/presentation/components/ui/button";
 import { Input } from "@/presentation/components/ui/input";
 import { Label } from "@/presentation/components/ui/label";
@@ -20,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/presentation/components/ui/select";
-import { FilePickerField } from "@/presentation/components/common/FilePickerField";
+import { FileDropField } from "@/presentation/components/common/FileDropField";
 import { CardCertificateSelect } from "./CardCertificateSelect";
 
 interface SignFormProps {
@@ -61,7 +62,7 @@ export function SignForm({ mode }: SignFormProps) {
           ? await signPades.mutateAsync(base)
           : await signXades.mutateAsync({ ...base, contentType });
     } catch (e) {
-      toast.error("İmzalama başarısız", { description: (e as Error).message });
+      toast.error("İmzalama başarısız", { description: errorMessage(e) });
       return;
     }
     // PIN'i imza biter bitmez temizle (kayıt iptal edilse bile bellekte tutma).
@@ -88,7 +89,7 @@ export function SignForm({ mode }: SignFormProps) {
       const finalPath = await files.moveFile(tempPath, outputPath);
       toast.success("İmzalandı", { description: basename(finalPath) });
     } catch (e) {
-      toast.error("Dosya kaydedilemedi", { description: (e as Error).message });
+      toast.error("Dosya kaydedilemedi", { description: errorMessage(e) });
     }
   };
 
@@ -105,8 +106,9 @@ export function SignForm({ mode }: SignFormProps) {
         onCertificateChange={setCertificateId}
       />
 
-      <FilePickerField
+      <FileDropField
         label={mode === "pades" ? "İmzalanacak PDF" : "İmzalanacak XML"}
+        hint={mode === "pades" ? "PDF dosyası" : "XML dosyası"}
         value={contentPath}
         onChange={setContentPath}
         filters={FILTERS[mode]}

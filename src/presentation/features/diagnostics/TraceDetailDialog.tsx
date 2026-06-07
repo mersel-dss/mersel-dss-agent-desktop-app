@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import type { TraceRecord } from "@/domain/diagnostics/types";
 import { formatDate } from "@/shared/lib/format";
 import { traceToJson, copyToClipboard, safeFileSlug } from "@/shared/lib/diagnostics";
+import { errorMessage } from "@/shared/lib/errors";
 import { useFiles } from "@/application/platform/hooks";
 import { DescriptionList } from "@/presentation/components/common/DescriptionList";
 import { HttpStatusBadge } from "@/presentation/components/common/HttpStatusBadge";
@@ -55,7 +56,7 @@ export function TraceDetailDialog({ record, onClose }: Props) {
       await files.saveTextFile(path, traceToJson(record));
       toast.success("Kayıt dışa aktarıldı");
     } catch (e) {
-      toast.error("Dışa aktarma başarısız", { description: (e as Error).message });
+      toast.error("Dışa aktarma başarısız", { description: errorMessage(e) });
     }
   };
 

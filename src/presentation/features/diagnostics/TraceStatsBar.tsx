@@ -4,6 +4,7 @@
 
 import { Power, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { errorMessage } from "@/shared/lib/errors";
 import type { TraceStats } from "@/domain/diagnostics/types";
 import { useClearTraces, useSetTracesEnabled } from "@/application/diagnostics/hooks";
 import { Button } from "@/presentation/components/ui/button";
@@ -56,7 +57,7 @@ export function TraceStatsBar({ stats, visible }: { stats: TraceStats; visible?:
           disabled={setEnabled.isPending}
           onClick={() =>
             setEnabled.mutate(!stats.enabled, {
-              onError: (e) => toast.error((e as Error).message),
+              onError: (e) => toast.error(errorMessage(e)),
             })
           }
         >
@@ -70,7 +71,7 @@ export function TraceStatsBar({ stats, visible }: { stats: TraceStats; visible?:
           onClick={() =>
             clear.mutate(undefined, {
               onSuccess: () => toast.success("Trace tamponu temizlendi"),
-              onError: (e) => toast.error((e as Error).message),
+              onError: (e) => toast.error(errorMessage(e)),
             })
           }
         >

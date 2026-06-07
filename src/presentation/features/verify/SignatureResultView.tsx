@@ -8,6 +8,7 @@ import { CircleCheck, CircleX, FileX } from "lucide-react";
 import type { SignatureVerificationResult } from "@/domain/verification/types";
 import { formatDate } from "@/shared/lib/format";
 import { EmptyState } from "@/presentation/components/common/EmptyState";
+import { AlertList } from "@/presentation/components/common/AlertList";
 import { SignatureTree } from "./components/SignatureTree";
 import { SignatureDetailPanel } from "./components/SignatureDetailPanel";
 import { VerdictHero } from "./components/VerdictHero";
@@ -40,20 +41,8 @@ export function SignatureResultView({
         ]}
       />
 
-      {result.errors && result.errors.length > 0 ? (
-        <ul className="list-inside list-disc border-l-2 border-destructive/50 bg-destructive/5 py-2 pl-4 pr-3 text-sm text-destructive">
-          {result.errors.map((e, i) => (
-            <li key={i}>{e}</li>
-          ))}
-        </ul>
-      ) : null}
-      {result.warnings && result.warnings.length > 0 ? (
-        <ul className="list-inside list-disc border-l-2 border-warning/60 bg-warning/5 py-2 pl-4 pr-3 text-sm text-muted-foreground">
-          {result.warnings.map((w, i) => (
-            <li key={i}>{w}</li>
-          ))}
-        </ul>
-      ) : null}
+      <AlertList items={result.errors} tone="error" />
+      <AlertList items={result.warnings} tone="warning" />
 
       {signatures.length === 0 ? (
         <EmptyState

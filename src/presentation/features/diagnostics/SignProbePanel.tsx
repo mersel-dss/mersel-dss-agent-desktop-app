@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import type { ProbeBranch, SignProbeResult } from "@/domain/diagnostics/types";
 import { useSmartcards } from "@/application/signing/hooks";
 import { useSignProbe } from "@/application/diagnostics/hooks";
+import { errorMessage } from "@/shared/lib/errors";
 import { Button } from "@/presentation/components/ui/button";
 import { Label } from "@/presentation/components/ui/label";
 import {
@@ -70,7 +71,7 @@ export function SignProbePanel() {
     if (!terminalName) return;
     probe.mutate(
       { terminalName },
-      { onError: (e) => toast.error("Prob başarısız", { description: (e as Error).message }) },
+      { onError: (e) => toast.error("Prob başarısız", { description: errorMessage(e) }) },
     );
   };
 

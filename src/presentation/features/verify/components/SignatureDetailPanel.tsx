@@ -9,7 +9,7 @@ import type { SignatureInfo } from "@/domain/verification/types";
 import { formatDate } from "@/shared/lib/format";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/presentation/components/ui/button";
-import { InfoGrid } from "./InfoGrid";
+import { InfoGrid } from "@/presentation/components/common/InfoGrid";
 import { ToneBadge } from "./ToneBadge";
 import { CertificateDialog } from "./CertificateDialog";
 import { ValidationChecksDialog } from "./ValidationChecksDialog";

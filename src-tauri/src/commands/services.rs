@@ -19,6 +19,10 @@ use tauri::{AppHandle, Emitter, Manager, State};
 /// Arka plan güncelleyicinin GitHub'ı yoklama aralığı.
 const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(3 * 60 * 60);
 
+/// Frontend'in dinlediği event adları (TS tarafıyla birebir eşleşmelidir).
+const EVENT_DOWNLOAD_PROGRESS: &str = "download-progress";
+const EVENT_SERVICE_UPDATED: &str = "service-updated";
+
 /// Tüm servislerin anlık durumunu döner.
 #[tauri::command]
 pub async fn list_services(
@@ -116,20 +120,23 @@ async fn resolve_launch(app: &AppHandle, kind: ServiceKind) -> AppResult<(String
     Ok((java_exe, jar_path))
 }
 
-/// Bir servisi sessiz (headless) modda, ilk boş porttan başlatır.
-#[tauri::command]
-pub async fn start_service(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    kind: ServiceKind,
-) -> AppResult<u32> {
+/// Bir servisi çözümler (Java + jar), tercih edilen porttan başlayarak ilk boş
+/// porta yerleşir ve manager üzerinden başlatır. Üç başlatma noktasının
+/// (komut, otomatik başlatma, güncelleme sonrası yeniden başlatma) ortak çekirdeği.
+async fn launch_service(app: &AppHandle, kind: ServiceKind) -> AppResult<u32> {
     let descriptor = descriptor_for(kind);
-    let (java_exe, jar_path) = resolve_launch(&app, kind).await?;
-    // Port çakışmasına karşı tercih edilen porttan başlayıp ilk boş porta yerleş.
+    let (java_exe, jar_path) = resolve_launch(app, kind).await?;
     let port = net::find_free_port(descriptor.default_port);
 
+    let state = app.state::<AppState>();
     let mut manager = state.manager.lock().await;
     manager.start(&descriptor, &java_exe, &jar_path, port)
+}
+
+/// Bir servisi sessiz (headless) modda, ilk boş porttan başlatır.
+#[tauri::command]
+pub async fn start_service(app: AppHandle, kind: ServiceKind) -> AppResult<u32> {
+    launch_service(&app, kind).await
 }
 
 /// Bir servisi durdurur.
@@ -173,7 +180,7 @@ async fn download_release(
     let app_handle = app.clone();
     github::download_asset(&asset, &dest, move |downloaded, total| {
         let _ = app_handle.emit(
-            "download-progress",
+            EVENT_DOWNLOAD_PROGRESS,
             DownloadProgress {
                 kind,
                 downloaded,
@@ -185,7 +192,7 @@ async fn download_release(
     .await?;
 
     let _ = app.emit(
-        "download-progress",
+        EVENT_DOWNLOAD_PROGRESS,
         DownloadProgress {
             kind,
             downloaded: asset.size,
@@ -238,7 +245,7 @@ fn cleanup_old_jars(dir: &Path, descriptor: &ServiceDescriptor, keep: &str) {
 /// Ağ yoksa veya bir adım başarısız olursa sessizce loglar ve devam eder;
 /// uygulamanın açılışını asla bloke etmez veya çökertmez.
 pub async fn auto_setup(app: AppHandle) {
-    for kind in [ServiceKind::Agent, ServiceKind::Verifier] {
+    for kind in config::ALL_SERVICES.map(|d| d.kind) {
         if let Err(err) = ensure_latest(&app, kind).await {
             tracing::warn!(
                 service = kind.as_str(),
@@ -258,7 +265,7 @@ pub async fn auto_setup(app: AppHandle) {
         return;
     }
 
-    for kind in [ServiceKind::Agent, ServiceKind::Verifier] {
+    for kind in config::ALL_SERVICES.map(|d| d.kind) {
         if let Err(err) = auto_start(&app, kind).await {
             tracing::warn!(
                 service = kind.as_str(),
@@ -302,7 +309,7 @@ pub async fn background_updater(app: AppHandle) {
 
     loop {
         ticker.tick().await;
-        for kind in [ServiceKind::Agent, ServiceKind::Verifier] {
+        for kind in config::ALL_SERVICES.map(|d| d.kind) {
             match ensure_latest(&app, kind).await {
                 Ok(true) => on_service_updated(&app, kind).await,
                 Ok(false) => {}
@@ -340,7 +347,7 @@ async fn on_service_updated(app: &AppHandle, kind: ServiceKind) {
         "servis jar'ı güncellendi"
     );
     let _ = app.emit(
-        "service-updated",
+        EVENT_SERVICE_UPDATED,
         ServiceUpdatedEvent { kind, tag, restarted },
     );
 }
@@ -349,8 +356,6 @@ async fn on_service_updated(app: &AppHandle, kind: ServiceKind) {
 /// porttan yeniden başlatır. Dönüş: yeniden başlatma yapıldıysa `true`.
 /// Çalışmıyorsa hiçbir şey yapmaz (yeni jar bir sonraki başlatmada kullanılır).
 async fn restart_if_running(app: &AppHandle, kind: ServiceKind) -> AppResult<bool> {
-    let descriptor = descriptor_for(kind);
-
     {
         let state = app.state::<AppState>();
         let mut manager = state.manager.lock().await;
@@ -360,12 +365,7 @@ async fn restart_if_running(app: &AppHandle, kind: ServiceKind) -> AppResult<boo
         manager.stop(kind)?;
     }
 
-    let (java_exe, jar_path) = resolve_launch(app, kind).await?;
-    let port = net::find_free_port(descriptor.default_port);
-
-    let state = app.state::<AppState>();
-    let mut manager = state.manager.lock().await;
-    manager.start(&descriptor, &java_exe, &jar_path, port)?;
+    launch_service(app, kind).await?;
     Ok(true)
 }
 
@@ -387,11 +387,6 @@ async fn auto_start(app: &AppHandle, kind: ServiceKind) -> AppResult<()> {
         }
     }
 
-    let (java_exe, jar_path) = resolve_launch(app, kind).await?;
-    let port = net::find_free_port(descriptor.default_port);
-
-    let state = app.state::<AppState>();
-    let mut manager = state.manager.lock().await;
-    manager.start(&descriptor, &java_exe, &jar_path, port)?;
+    launch_service(app, kind).await?;
     Ok(())
 }

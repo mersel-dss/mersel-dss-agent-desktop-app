@@ -24,6 +24,7 @@ import {
 import type { ProgressMap } from "@/application/services/useDownloadProgress";
 import { SERVICE_META } from "@/shared/config/services";
 import { basename, formatBytes } from "@/shared/lib/format";
+import { errorMessage } from "@/shared/lib/errors";
 import { Button } from "@/presentation/components/ui/button";
 import {
   Card,
@@ -65,20 +66,20 @@ export function ServiceControlCard({ service, progress }: ServiceControlCardProp
   const handleInstall = () => {
     install.mutate(service.kind, {
       onSuccess: () => toast.success(`${meta.shortName} kuruldu`),
-      onError: (e) => toast.error(`Kurulum başarısız: ${(e as Error).message}`),
+      onError: (e) => toast.error(`Kurulum başarısız: ${errorMessage(e)}`),
     });
   };
 
   const handleStart = () => {
     start.mutate(service.kind, {
       onSuccess: () => toast.success(`${meta.shortName} başlatıldı`),
-      onError: (e) => toast.error(`Başlatılamadı: ${(e as Error).message}`),
+      onError: (e) => toast.error(`Başlatılamadı: ${errorMessage(e)}`),
     });
   };
 
   const handleStop = () => {
     stop.mutate(service.kind, {
-      onError: (e) => toast.error(`Durdurulamadı: ${(e as Error).message}`),
+      onError: (e) => toast.error(`Durdurulamadı: ${errorMessage(e)}`),
     });
   };
 

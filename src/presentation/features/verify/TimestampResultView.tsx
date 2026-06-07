@@ -7,8 +7,9 @@ import { CircleCheck, CircleX, ScrollText } from "lucide-react";
 import type { TimestampVerificationResult } from "@/domain/verification/types";
 import { formatDate } from "@/shared/lib/format";
 import { Button } from "@/presentation/components/ui/button";
+import { AlertList } from "@/presentation/components/common/AlertList";
 import { CertificateDialog } from "./components/CertificateDialog";
-import { InfoGrid } from "./components/InfoGrid";
+import { InfoGrid } from "@/presentation/components/common/InfoGrid";
 import { VerdictHero } from "./components/VerdictHero";
 
 export function TimestampResultView({
@@ -80,21 +81,8 @@ export function TimestampResultView({
         />
       ) : null}
 
-      {result.errors && result.errors.length > 0 ? (
-        <ul className="list-inside list-disc border-l-2 border-destructive/50 bg-destructive/5 py-2 pl-4 pr-3 text-sm text-destructive">
-          {result.errors.map((e, i) => (
-            <li key={i}>{e}</li>
-          ))}
-        </ul>
-      ) : null}
-
-      {result.warnings && result.warnings.length > 0 ? (
-        <ul className="list-inside list-disc border-l-2 border-warning/60 bg-warning/5 py-2 pl-4 pr-3 text-sm text-muted-foreground">
-          {result.warnings.map((w, i) => (
-            <li key={i}>{w}</li>
-          ))}
-        </ul>
-      ) : null}
+      <AlertList items={result.errors} tone="error" />
+      <AlertList items={result.warnings} tone="warning" />
     </div>
   );
 }

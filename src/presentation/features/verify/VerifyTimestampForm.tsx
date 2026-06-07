@@ -5,9 +5,11 @@
 import { useState } from "react";
 import { Clock } from "lucide-react";
 import { toast } from "sonner";
+import { errorMessage } from "@/shared/lib/errors";
 import { useVerifyTimestamp } from "@/application/verification/hooks";
 import { Button } from "@/presentation/components/ui/button";
-import { FileDropField } from "./components/FileDropField";
+import { IconMedallion } from "@/presentation/components/common/IconMedallion";
+import { FileDropField } from "@/presentation/components/common/FileDropField";
 import { TimestampResultView } from "./TimestampResultView";
 import {
   ResultLoading,
@@ -27,7 +29,7 @@ export function VerifyTimestampForm() {
       {
         onError: (e) =>
           toast.error("Doğrulama başarısız", {
-            description: (e as Error).message,
+            description: errorMessage(e),
           }),
       },
     );
@@ -36,9 +38,9 @@ export function VerifyTimestampForm() {
   const input = (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-dashed border-[rgb(var(--accent))]/25 bg-brand-soft text-brand-hover">
+        <IconMedallion size="lg" dashed>
           <Clock className="h-5 w-5" />
-        </span>
+        </IconMedallion>
         <div>
           <h2 className="text-sm font-semibold">Zaman Damgası</h2>
           <p className="text-xs text-muted-foreground">RFC 3161 · TSA</p>

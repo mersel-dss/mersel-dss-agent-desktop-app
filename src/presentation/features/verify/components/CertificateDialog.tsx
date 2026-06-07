@@ -26,7 +26,7 @@ import {
 } from "@/presentation/components/ui/tabs";
 import { ScrollArea } from "@/presentation/components/ui/scroll-area";
 import { Separator } from "@/presentation/components/ui/separator";
-import { InfoGrid } from "./InfoGrid";
+import { InfoGrid } from "@/presentation/components/common/InfoGrid";
 import { ToneBadge } from "./ToneBadge";
 import { CheckRow, boolToState } from "./CheckRow";
 import {

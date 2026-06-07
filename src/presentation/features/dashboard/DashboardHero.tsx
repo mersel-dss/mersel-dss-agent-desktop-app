@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
-import { useJava, useServices } from "@/application/services/hooks";
+import { useJava, useServiceHealth } from "@/application/services/hooks";
 import { cn } from "@/shared/lib/utils";
 
 type Tone = "success" | "warning" | "critical" | "idle";
@@ -51,12 +51,8 @@ const TONE: Record<
 };
 
 export function DashboardHero() {
-  const { data } = useServices();
+  const { total, running, crashed, allRunning } = useServiceHealth();
   const java = useJava();
-
-  const total = data?.length ?? 0;
-  const running = data?.filter((s) => s.state === "running").length ?? 0;
-  const crashed = data?.some((s) => s.state === "crashed") ?? false;
 
   let tone: Tone = "idle";
   let headline = "Çalışma alanı boşta";
@@ -71,7 +67,7 @@ export function DashboardHero() {
     tone = "critical";
     headline = "Bir servis hata verdi";
     sub = "Aşağıdaki karttan son hatayı inceleyip yeniden başlatabilirsiniz.";
-  } else if (total > 0 && running === total) {
+  } else if (allRunning) {
     tone = "success";
     headline = "Tüm servisler çalışıyor";
     sub = "İmza ajanı ve doğrulama servisi hazır; tüm akışları kullanabilirsiniz.";

@@ -8,6 +8,7 @@ import { useDownloadSupportBundle } from "@/application/diagnostics/hooks";
 import { useFiles } from "@/application/platform/hooks";
 import { Button } from "@/presentation/components/ui/button";
 import { basename } from "@/shared/lib/format";
+import { errorMessage } from "@/shared/lib/errors";
 
 export function SupportBundleButton() {
   const download = useDownloadSupportBundle();
@@ -22,7 +23,7 @@ export function SupportBundleButton() {
     if (!path) return;
     download.mutate(path, {
       onSuccess: (saved) => toast.success("Destek paketi kaydedildi", { description: basename(saved) }),
-      onError: (e) => toast.error("İndirilemedi", { description: (e as Error).message }),
+      onError: (e) => toast.error("İndirilemedi", { description: errorMessage(e) }),
     });
   };
 

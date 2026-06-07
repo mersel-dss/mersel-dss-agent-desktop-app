@@ -10,6 +10,7 @@ import type { TraceRecord } from "@/domain/diagnostics/types";
 import { useTraces } from "@/application/diagnostics/hooks";
 import { useFiles } from "@/application/platform/hooks";
 import { tracesToNdjson } from "@/shared/lib/diagnostics";
+import { errorMessage } from "@/shared/lib/errors";
 import { Button } from "@/presentation/components/ui/button";
 import { Input } from "@/presentation/components/ui/input";
 import { Skeleton } from "@/presentation/components/ui/skeleton";
@@ -57,7 +58,7 @@ export function TracesPanel() {
       await files.saveTextFile(path, tracesToNdjson(all));
       toast.success(`${all.length} kayıt dışa aktarıldı`);
     } catch (e) {
-      toast.error("Dışa aktarma başarısız", { description: (e as Error).message });
+      toast.error("Dışa aktarma başarısız", { description: errorMessage(e) });
     }
   };
 

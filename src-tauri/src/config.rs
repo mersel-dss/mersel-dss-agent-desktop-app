@@ -32,7 +32,8 @@ pub const VERIFIER: ServiceDescriptor = ServiceDescriptor {
     display_name: "Mersel Doğrulama Servisi",
     repo_owner: "mersel-dss",
     repo_name: "mersel-dss-verifier-api-java",
-    jar_prefix: "mersel-dss-verifier-api",
+    // Release asset adı "mersel-dss-verify-api-<sürüm>.jar" (verify, verifier değil).
+    jar_prefix: "mersel-dss-verify-api",
     default_port: 8086,
 };
 

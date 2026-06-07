@@ -2,10 +2,8 @@
  * İmza sayfası: PAdES (PDF) ve XAdES (XML) sekmeleri.
  */
 
-import { Link } from "react-router-dom";
 import {
   KeyRound,
-  ServerOff,
   ShieldCheck,
   FileText,
   FileCode2,
@@ -14,8 +12,9 @@ import {
 import { useService } from "@/application/services/hooks";
 import { ScrollPage } from "@/presentation/components/common/ScrollPage";
 import { PageHeader } from "@/presentation/components/common/PageHeader";
-import { EmptyState } from "@/presentation/components/common/EmptyState";
-import { Button } from "@/presentation/components/ui/button";
+import { ServiceOfflineNotice } from "@/presentation/components/common/ServiceOfflineNotice";
+import { SectionHeading } from "@/presentation/components/common/SectionHeading";
+import { IconMedallion } from "@/presentation/components/common/IconMedallion";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import {
   Tabs,
@@ -47,16 +46,14 @@ function SignGuide() {
   return (
     <div className="space-y-5">
       <div className="rounded-lg border border-border bg-surface-raised p-5">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-dim">
-          Nasıl çalışır?
-        </h3>
+        <SectionHeading>Nasıl çalışır?</SectionHeading>
         <ol className="mt-4 space-y-4">
           {steps.map((s, i) => (
             <li key={s.title} className="flex gap-3.5">
               <div className="flex flex-col items-center">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand-hover">
+                <IconMedallion size="sm">
                   <s.icon className="h-4 w-4" />
-                </span>
+                </IconMedallion>
                 {i < steps.length - 1 ? (
                   <span className="mt-1 w-px flex-1 bg-border" />
                 ) : null}
@@ -91,15 +88,9 @@ export function SignPage() {
           title="İmzala"
           description="Mali mühür / e-imza kartınızla PDF ve XML belgelerini imzalayın."
         />
-        <EmptyState
-          icon={ServerOff}
+        <ServiceOfflineNotice
           title="İmza ajanı çalışmıyor"
           description="İmza atabilmek için önce Genel Bakış'tan imza ajanını başlatın."
-          action={
-            <Button asChild variant="outline">
-              <Link to="/">Genel Bakış'a git</Link>
-            </Button>
-          }
         />
       </ScrollPage>
     );

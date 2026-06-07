@@ -17,7 +17,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useServices } from "@/application/services/hooks";
+import { errorMessage } from "@/shared/lib/errors";
+import { useServiceHealth } from "@/application/services/hooks";
 import { useAppUpdate } from "@/application/update/hooks";
 import { cn } from "@/shared/lib/utils";
 
@@ -38,28 +39,24 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 function StatusPill() {
-  const { data } = useServices();
-  const total = data?.length ?? 0;
-  const running = data?.filter((s) => s.state === "running").length ?? 0;
+  const { total, running, allRunning, anyRunning } = useServiceHealth();
 
-  const tone =
-    total > 0 && running === total
-      ? "text-status-running"
-      : running > 0
-        ? "text-[rgb(var(--tone-warning-fg))]"
-        : "text-fg-dim";
-  const dot =
-    total > 0 && running === total
-      ? "bg-status-running"
-      : running > 0
-        ? "bg-status-starting"
-        : "bg-fg-dim";
+  const tone = allRunning
+    ? "text-status-running"
+    : anyRunning
+      ? "text-[rgb(var(--tone-warning-fg))]"
+      : "text-fg-dim";
+  const dot = allRunning
+    ? "bg-status-running"
+    : anyRunning
+      ? "bg-status-starting"
+      : "bg-fg-dim";
   const label =
     total === 0
       ? "Servisler bekleniyor"
-      : running === total
+      : allRunning
         ? "Tüm servisler çalışıyor"
-        : running > 0
+        : anyRunning
           ? `${running}/${total} servis`
           : "Servisler durduruldu";
 
@@ -90,7 +87,7 @@ function UpdateButton() {
     toast.info("Güncelleme indiriliyor…");
     install.mutate(undefined, {
       onError: (e) =>
-        toast.error(`Güncelleme başarısız: ${(e as Error).message}`),
+        toast.error(`Güncelleme başarısız: ${errorMessage(e)}`),
     });
   };
 

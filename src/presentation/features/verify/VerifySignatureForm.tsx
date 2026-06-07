@@ -5,11 +5,13 @@
 import { useState } from "react";
 import { FileSignature, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { errorMessage } from "@/shared/lib/errors";
 import { useVerifySignature } from "@/application/verification/hooks";
 import type { VerificationLevel } from "@/domain/verification/types";
 import { Button } from "@/presentation/components/ui/button";
 import { Label } from "@/presentation/components/ui/label";
-import { FileDropField } from "./components/FileDropField";
+import { IconMedallion } from "@/presentation/components/common/IconMedallion";
+import { FileDropField } from "@/presentation/components/common/FileDropField";
 import { SignatureResultView } from "./SignatureResultView";
 import {
   ResultLoading,
@@ -38,7 +40,7 @@ export function VerifySignatureForm() {
       {
         onError: (e) =>
           toast.error("Doğrulama başarısız", {
-            description: (e as Error).message,
+            description: errorMessage(e),
           }),
       },
     );
@@ -47,9 +49,9 @@ export function VerifySignatureForm() {
   const input = (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-dashed border-[rgb(var(--accent))]/25 bg-brand-soft text-brand-hover">
+        <IconMedallion size="lg" dashed>
           <FileSignature className="h-5 w-5" />
-        </span>
+        </IconMedallion>
         <div>
           <h2 className="text-sm font-semibold">İmzalı Doküman</h2>
           <p className="text-xs text-muted-foreground">

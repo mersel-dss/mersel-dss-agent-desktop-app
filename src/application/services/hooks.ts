@@ -37,6 +37,35 @@ export function useService(kind: ServiceKind) {
   return { service, isRunning: service?.state === "running", query };
 }
 
+export interface ServiceHealth {
+  total: number;
+  running: number;
+  /** En az bir servis çöktü mü? */
+  crashed: boolean;
+  /** Servisler yüklendi ve hepsi çalışıyor mu? */
+  allRunning: boolean;
+  /** En az bir servis çalışıyor mu? */
+  anyRunning: boolean;
+}
+
+/**
+ * Tüm servislerin toplu sağlık özeti. Üst çubuk durumu, dashboard hero ve
+ * boot ekranı gibi yerlerde tekrar eden "kaç/kaç çalışıyor" türetmesini tek noktada toplar.
+ */
+export function useServiceHealth(): ServiceHealth {
+  const { data } = useServices();
+  const services = data ?? [];
+  const total = services.length;
+  const running = services.filter((s) => s.state === "running").length;
+  return {
+    total,
+    running,
+    crashed: services.some((s) => s.state === "crashed"),
+    allRunning: total > 0 && running === total,
+    anyRunning: running > 0,
+  };
+}
+
 export function useLatestRelease(kind: ServiceKind, enabled = true) {
   return useQuery({
     queryKey: serviceKeys.release(kind),

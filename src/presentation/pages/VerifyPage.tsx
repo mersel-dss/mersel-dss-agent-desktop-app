@@ -4,11 +4,9 @@
  * (girdi rayı solda · sonuç detayı sağda, her biri bağımsız kaydırır).
  */
 
-import { Link } from "react-router-dom";
-import { Clock, FileSignature, ServerOff } from "lucide-react";
+import { Clock, FileSignature } from "lucide-react";
 import { useService } from "@/application/services/hooks";
-import { EmptyState } from "@/presentation/components/common/EmptyState";
-import { Button } from "@/presentation/components/ui/button";
+import { ServiceOfflineNotice } from "@/presentation/components/common/ServiceOfflineNotice";
 import {
   Tabs,
   TabsContent,
@@ -24,15 +22,9 @@ export function VerifyPage() {
   if (!isRunning) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <EmptyState
-          icon={ServerOff}
+        <ServiceOfflineNotice
           title="Doğrulama servisi çalışmıyor"
           description="Doğrulama yapabilmek için önce Genel Bakış'tan doğrulama servisini başlatın."
-          action={
-            <Button asChild variant="outline">
-              <Link to="/">Genel Bakış'a git</Link>
-            </Button>
-          }
         />
       </div>
     );

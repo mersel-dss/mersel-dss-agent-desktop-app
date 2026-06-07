@@ -3,13 +3,10 @@
  * Tüm veriler agent diagnostics API'sinden native gelir; pencere açmaya gerek yoktur.
  */
 
-import { Link } from "react-router-dom";
-import { ServerOff } from "lucide-react";
 import { useService } from "@/application/services/hooks";
 import { ScrollPage } from "@/presentation/components/common/ScrollPage";
 import { PageHeader } from "@/presentation/components/common/PageHeader";
-import { EmptyState } from "@/presentation/components/common/EmptyState";
-import { Button } from "@/presentation/components/ui/button";
+import { ServiceOfflineNotice } from "@/presentation/components/common/ServiceOfflineNotice";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import {
   Tabs,
@@ -31,15 +28,9 @@ export function DiagnosticsPage() {
           title="Tanılama"
           description="İmza ajanının izleri, kart prob sonuçları ve destek paketi."
         />
-        <EmptyState
-          icon={ServerOff}
+        <ServiceOfflineNotice
           title="İmza ajanı çalışmıyor"
           description="Tanılama verisi için önce Genel Bakış'tan imza ajanını başlatın."
-          action={
-            <Button asChild variant="outline">
-              <Link to="/">Genel Bakış'a git</Link>
-            </Button>
-          }
         />
       </ScrollPage>
     );

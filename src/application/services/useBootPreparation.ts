@@ -26,6 +26,8 @@ export interface BootPreparation {
   anyWarn: boolean;
   /** Aktif indirmelerin birleşik yüzdesi (0-100) veya null. */
   downloadPercent: number | null;
+  /** Şu an en az bir paket indiriliyor mu? */
+  downloading: boolean;
 }
 
 export function useBootPreparation(): BootPreparation {
@@ -103,5 +105,6 @@ export function useBootPreparation(): BootPreparation {
     ready: bothRunning,
     anyWarn: runtime === "warn" || launch === "warn",
     downloadPercent,
+    downloading,
   };
 }

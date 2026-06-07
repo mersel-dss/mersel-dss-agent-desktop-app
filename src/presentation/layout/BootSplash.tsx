@@ -7,7 +7,9 @@
  * - En az `MIN_VISIBLE_MS` görünür (anlık parlamayı önler).
  * - Tüm servisler çalışınca yumuşak fade-out ile kapanır.
  * - `SKIP_AFTER_MS` sonra (veya bir uyarı varsa hemen) "Panele geç" sunar.
- * - `MAX_VISIBLE_MS` aşılırsa kullanıcı asla mahsur kalmasın diye otomatik kapanır.
+ * - `IDLE_MAX_MS` boyunca ilerleme olmazsa (offline/takılma) otomatik kapanır.
+ * - Bir paket indiriliyorsa kapanmaz; indirme bitip servisler kalkana kadar
+ *   bekler — `HARD_MAX_MS` mutlak tavanı her hâlükârda kullanıcıyı kurtarır.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -31,7 +33,10 @@ import { cn } from "@/shared/lib/utils";
 
 const MIN_VISIBLE_MS = 1300;
 const SKIP_AFTER_MS = 4000;
-const MAX_VISIBLE_MS = 30000;
+/** İndirme yokken (boşta) bu süreden sonra otomatik kapan. */
+const IDLE_MAX_MS = 30000;
+/** İndirme sürse bile en geç bu sürede kapan (mutlak tavan). */
+const HARD_MAX_MS = 4 * 60 * 1000;
 const FADE_MS = 450;
 
 const STEP_ICON: Record<BootStepId, LucideIcon> = {
@@ -56,10 +61,14 @@ export function BootSplash() {
   }, [gone]);
 
   const elapsed = now - startRef.current;
+  // Boşta zaman aşımı yalnızca aktif indirme YOKKEN devreye girer; böylece
+  // doğrulama servisi gibi büyük paketler inerken ekran erken kapanmaz.
+  const idleTimeout = elapsed >= IDLE_MAX_MS && !prep.downloading;
   const shouldDismiss =
     skipped ||
     (prep.ready && elapsed >= MIN_VISIBLE_MS) ||
-    elapsed >= MAX_VISIBLE_MS;
+    idleTimeout ||
+    elapsed >= HARD_MAX_MS;
 
   // 1) Kapanış kararı: yalnızca fade-out'u (leaving) tetikler.
   useEffect(() => {
