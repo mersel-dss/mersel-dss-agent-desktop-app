@@ -5,6 +5,7 @@ pub mod services;
 pub mod signing;
 pub mod system;
 pub mod verification;
+pub mod virtualcards;
 
 use crate::config::descriptor_for;
 use crate::error::{AppError, AppResult};

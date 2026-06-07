@@ -68,3 +68,66 @@ pub async fn sign_xades(
     let resp = ensure_success(long_client()?.post(url).multipart(form).send().await?).await?;
     Ok(resp.bytes().await?.to_vec())
 }
+
+/// Tanımlı sanal kartları listeler. `GET /smartcard/virtual`
+pub async fn list_virtual_cards(port: u16) -> AppResult<serde_json::Value> {
+    let url = format!("{}/smartcard/virtual", base_url(port));
+    let resp = ensure_success(long_client()?.get(url).send().await?).await?;
+    Ok(resp.json().await?)
+}
+
+/// PKCS#11 (HSM / yüklü sürücü) sanal kart tanımlar.
+/// `POST /smartcard/virtual/pkcs11`
+pub async fn register_pkcs11_virtual_card(
+    port: u16,
+    name: &str,
+    library_path: &str,
+) -> AppResult<serde_json::Value> {
+    let body = serde_json::json!({ "name": name, "libraryPath": library_path });
+    let url = format!("{}/smartcard/virtual/pkcs11", base_url(port));
+    let resp = ensure_success(long_client()?.post(url).json(&body).send().await?).await?;
+    Ok(resp.json().await?)
+}
+
+/// PKCS#12 (PFX) sanal kart tanımlar. PFX dosyası + parola multipart yüklenir.
+/// `POST /smartcard/virtual/pkcs12`
+pub async fn register_pkcs12_virtual_card(
+    port: u16,
+    name: &str,
+    pfx_path: &Path,
+    password: &str,
+) -> AppResult<serde_json::Value> {
+    let form = reqwest::multipart::Form::new()
+        .text("name", name.to_string())
+        .part("file", file_part(pfx_path).await?)
+        .text("password", password.to_string());
+
+    let url = format!("{}/smartcard/virtual/pkcs12", base_url(port));
+    let resp = ensure_success(long_client()?.post(url).multipart(form).send().await?).await?;
+    Ok(resp.json().await?)
+}
+
+/// Bir sanal kartı kaldırır. `DELETE /smartcard/virtual/{name}`
+pub async fn remove_virtual_card(port: u16, name: &str) -> AppResult<()> {
+    let encoded = utf8_percent_encode(name);
+    let url = format!("{}/smartcard/virtual/{}", base_url(port), encoded);
+    ensure_success(long_client()?.delete(url).send().await?).await?;
+    Ok(())
+}
+
+/// Path segment'i için minimal yüzde-kodlama (boşluk ve ayraç karakterleri).
+fn utf8_percent_encode(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for byte in value.as_bytes() {
+        let c = *byte;
+        let unreserved = c.is_ascii_alphanumeric()
+            || matches!(c, b'-' | b'_' | b'.' | b'~');
+        if unreserved {
+            out.push(c as char);
+        } else {
+            out.push('%');
+            out.push_str(&format!("{c:02X}"));
+        }
+    }
+    out
+}

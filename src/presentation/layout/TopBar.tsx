@@ -7,6 +7,7 @@
 import { NavLink } from "react-router-dom";
 import {
   Activity,
+  CreditCard,
   DownloadCloud,
   FileSignature,
   LayoutDashboard,
@@ -35,8 +36,48 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Genel Bakış", icon: LayoutDashboard, end: true },
   { to: "/sign", label: "İmzala", icon: FileSignature },
   { to: "/verify", label: "Doğrula", icon: ShieldCheck },
+];
+
+/** Sağa yaslanan ikincil gezinme öğeleri. */
+const SECONDARY_NAV_ITEMS: NavItem[] = [
+  { to: "/virtual-cards", label: "Sanal Kartlar", icon: CreditCard },
   { to: "/diagnostics", label: "Tanılama", icon: Activity },
 ];
+
+function NavLinks({ items }: { items: NavItem[] }) {
+  return (
+    <>
+      {items.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          end={item.end}
+          className={({ isActive }) =>
+            cn(
+              "group relative flex items-center gap-2 whitespace-nowrap px-3 text-[13px] font-medium transition-colors duration-150",
+              isActive ? "text-fg" : "text-fg-muted hover:text-fg",
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <item.icon
+                className={cn(
+                  "h-[15px] w-[15px] shrink-0 transition-colors",
+                  isActive ? "text-primary" : "text-fg-dim group-hover:text-fg-muted",
+                )}
+              />
+              {item.label}
+              {isActive ? (
+                <span className="absolute inset-x-3 bottom-0 h-[2px] rounded-full bg-primary" />
+              ) : null}
+            </>
+          )}
+        </NavLink>
+      ))}
+    </>
+  );
+}
 
 function StatusPill() {
   const { total, running, allRunning, anyRunning } = useServiceHealth();
@@ -129,40 +170,20 @@ export function TopBar() {
 
       <span aria-hidden className="my-2.5 w-px shrink-0 bg-border" />
 
-      {/* Yatay gezinme — aktif öğe alt-çizgi göstergesiyle */}
+      {/* Birincil yatay gezinme — aktif öğe alt-çizgi göstergesiyle */}
       <nav className="flex items-stretch gap-0.5 overflow-x-auto">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              cn(
-                "group relative flex items-center gap-2 whitespace-nowrap px-3 text-[13px] font-medium transition-colors duration-150",
-                isActive ? "text-fg" : "text-fg-muted hover:text-fg",
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <item.icon
-                  className={cn(
-                    "h-[15px] w-[15px] shrink-0 transition-colors",
-                    isActive ? "text-primary" : "text-fg-dim group-hover:text-fg-muted",
-                  )}
-                />
-                {item.label}
-                {isActive ? (
-                  <span className="absolute inset-x-3 bottom-0 h-[2px] rounded-full bg-primary" />
-                ) : null}
-              </>
-            )}
-          </NavLink>
-        ))}
+        <NavLinks items={NAV_ITEMS} />
       </nav>
 
+      {/* İkincil gezinme — sağa yaslı */}
+      <nav className="ml-auto flex items-stretch gap-0.5 overflow-x-auto">
+        <NavLinks items={SECONDARY_NAV_ITEMS} />
+      </nav>
+
+      <span aria-hidden className="my-2.5 w-px shrink-0 bg-border" />
+
       {/* Sağ: arama · durum · sürüm */}
-      <div className="ml-auto flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <button
           type="button"
           className="hidden items-center gap-2 rounded-md border border-border bg-surface-muted py-1 pr-1.5 pl-2.5 text-[12px] text-fg-dim transition-colors hover:border-border-strong hover:text-fg-muted sm:flex"
