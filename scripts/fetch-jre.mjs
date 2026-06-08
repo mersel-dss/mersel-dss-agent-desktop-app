@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 /**
- * Platforma özel Adoptium Temurin JRE 8'i indirir ve `src-tauri/resources/jre`
- * dizinine NORMALİZE ederek yerleştirir.
+ * Platforma özel Adoptium Temurin JRE'leri indirir ve `src-tauri/resources/`
+ * altına NORMALİZE ederek yerleştirir. İki ayrı runtime paketlenir çünkü
+ * servisler farklı Java sürümleri ister:
+ *   • Java 8  → `src-tauri/resources/jre`    (imza/doğrulama; mali mühür/PKCS#11)
+ *   • Java 21 → `src-tauri/resources/jre21`  (XSLT önizleme; Spring Boot 3.4 + Saxon)
  *
  * Normalize sonrası tüm platformlarda yapı aynıdır:
- *   src-tauri/resources/jre/bin/java[.exe]
- *   src-tauri/resources/jre/lib/...
+ *   src-tauri/resources/<dest>/bin/java[.exe]
+ *   src-tauri/resources/<dest>/lib/...
  * (macOS arşivindeki `Contents/Home` katmanı düzleştirilir.)
  *
  * Kullanım:
- *   pnpm fetch-jre                      # host platform/mimari için
+ *   pnpm fetch-jre                      # her iki sürüm, host platform/mimari için
+ *   pnpm fetch-jre --version 21         # yalnızca Java 21
  *   pnpm fetch-jre --os linux --arch x64
  *   pnpm fetch-jre --os mac   --arch aarch64
  *   pnpm fetch-jre --os windows --arch x64
@@ -28,15 +32,26 @@ import { execFileSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, "..");
-const JRE_DEST = join(PROJECT_ROOT, "src-tauri", "resources", "jre");
+const RESOURCES_DIR = join(PROJECT_ROOT, "src-tauri", "resources");
 
-/** CLI argümanlarını ayrıştırır (--os, --arch). */
+/**
+ * Paketlenecek JRE'ler. Her biri Adoptium feature sürümü + hedef alt dizin.
+ * Servis-başına minimum Java sürümüyle (config.rs `min_java_major`) tutarlı:
+ *   8  → jre   (imza/doğrulama),  21 → jre21 (XSLT önizleme).
+ */
+const JRE_TARGETS = [
+  { version: "8", dir: "jre" },
+  { version: "21", dir: "jre21" },
+];
+
+/** CLI argümanlarını ayrıştırır (--os, --arch, --version). */
 function parseArgs() {
   const args = process.argv.slice(2);
   const out = {};
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--os") out.os = args[++i];
     else if (args[i] === "--arch") out.arch = args[++i];
+    else if (args[i] === "--version") out.version = args[++i];
   }
   return out;
 }
@@ -55,32 +70,82 @@ function detectTarget(override) {
 }
 
 /**
- * Denenecek mimari adaylarını döner. Temurin JRE 8'in bazı platform/mimari
- * kombinasyonları yoktur (örn. macOS aarch64 — Apple Silicon'da Rosetta ile x64
- * çalışır; Windows aarch64 da x64 emülasyonuyla çalışır). Bu durumlarda x64'e
- * düşülür.
+ * Denenecek mimari adaylarını döner. Temurin'in bazı platform/mimari
+ * kombinasyonları yoktur (örn. Windows aarch64 — x64 emülasyonuyla çalışır).
+ * Bu durumlarda x64'e düşülür.
+ *
+ * NOT: macOS aarch64 + Java 8, Temurin'de yoktur. Eskiden x64'e düşülüp Rosetta
+ * ile çalıştırılıyordu; ancak Apple Silicon'da Rosetta x86_64 Java 8 süreçleri
+ * güvenilmez biçimde askıda kalıp öldürülemez "zombie"lere dönüşerek imza ve
+ * doğrulama servislerinin hiç başlamamasına yol açıyordu. Bu kombinasyon artık
+ * `usesZulu()` üzerinden native arm64 Azul Zulu JRE 8 ile karşılanır.
  */
 function archCandidates(apiOs, apiArch) {
-  if (apiArch === "aarch64" && (apiOs === "mac" || apiOs === "windows")) {
+  if (apiArch === "aarch64" && apiOs === "windows") {
     return ["aarch64", "x64"];
   }
   return [apiArch];
 }
 
+/**
+ * Bu hedef için Adoptium yerine Azul Zulu kullanılmalı mı? Yalnızca Adoptium'un
+ * native build sağlamadığı macOS aarch64 + Java 8 kombinasyonu için. Azul Zulu,
+ * Apple Silicon için native arm64 JRE 8 yayınlar (Rosetta'ya gerek kalmaz).
+ */
+function usesZulu(version, apiOs, apiArch) {
+  return version === "8" && apiOs === "mac" && apiArch === "aarch64";
+}
+
+/** Adoptium OS/mimari terimlerini Azul Zulu metadata API terimlerine çevirir. */
+function zuluTerms(apiOs, apiArch) {
+  const osMap = { mac: "macos", linux: "linux", windows: "windows" };
+  const archMap = { aarch64: "aarch64", x64: "x64" };
+  return { zuluOs: osMap[apiOs], zuluArch: archMap[apiArch] };
+}
+
+/**
+ * Azul Zulu metadata API'sinden, verilen sürüm/OS/mimari için en güncel
+ * (GA, CA) JRE indirme URL'ini çözer. JavaFX (`-fx-`) ve CRaC varyantları
+ * elenir; düz JRE tercih edilir.
+ */
+async function resolveZuluUrl(version, apiOs, apiArch) {
+  const { zuluOs, zuluArch } = zuluTerms(apiOs, apiArch);
+  const archive = apiOs === "windows" ? "zip" : "tar.gz";
+  const api =
+    `https://api.azul.com/metadata/v1/zulu/packages/` +
+    `?java_version=${version}&os=${zuluOs}&arch=${zuluArch}` +
+    `&java_package_type=jre&archive_type=${archive}` +
+    `&latest=true&release_status=ga&availability_types=CA&page=1&page_size=20`;
+  const res = await fetch(api, { headers: { accept: "application/json" } });
+  if (!res.ok) {
+    throw new Error(`Azul Zulu metadata sorgusu başarısız (HTTP ${res.status})`);
+  }
+  const packages = await res.json();
+  const candidate = packages.find(
+    (p) => !/-fx-/.test(p.name) && !/crac/i.test(p.name),
+  );
+  if (!candidate?.download_url) {
+    throw new Error(
+      `Azul Zulu JRE ${version} bulunamadı: ${zuluOs}/${zuluArch}`,
+    );
+  }
+  return candidate.download_url;
+}
+
 /** Adoptium "latest binary" yönlendirme URL'i. */
-function downloadUrl(apiOs, apiArch) {
-  // imageType=jre, jvmImpl=hotspot, GA (genel kullanıma açık), sürüm 8.
+function downloadUrl(version, apiOs, apiArch) {
+  // imageType=jre, jvmImpl=hotspot, GA (genel kullanıma açık).
   return (
-    `https://api.adoptium.net/v3/binary/latest/8/ga/${apiOs}/${apiArch}` +
+    `https://api.adoptium.net/v3/binary/latest/${version}/ga/${apiOs}/${apiArch}` +
     `/jre/hotspot/normal/eclipse?project=jdk`
   );
 }
 
 /** Aday mimarileri sırayla dener; ilk yanıt veren arşivi indirir. */
-async function downloadFirstAvailable(apiOs, candidates, dest) {
+async function downloadFirstAvailable(version, apiOs, candidates, dest) {
   for (const arch of candidates) {
-    const url = downloadUrl(apiOs, arch);
-    console.log(`↓ Deneniyor (${apiOs}/${arch}): ${url}`);
+    const url = downloadUrl(version, apiOs, arch);
+    console.log(`↓ Deneniyor (JRE ${version} · ${apiOs}/${arch}): ${url}`);
     const res = await fetch(url, { redirect: "follow" });
     if (res.ok && res.body) {
       await pipeline(Readable.fromWeb(res.body), createWriteStream(dest));
@@ -90,7 +155,7 @@ async function downloadFirstAvailable(apiOs, candidates, dest) {
     console.log(`  · ${arch} mevcut değil (HTTP ${res.status})`);
   }
   throw new Error(
-    `JRE 8 indirilemedi: ${apiOs} için denenen mimariler [${candidates.join(", ")}] mevcut değil`,
+    `JRE ${version} indirilemedi: ${apiOs} için denenen mimariler [${candidates.join(", ")}] mevcut değil`,
   );
 }
 
@@ -146,30 +211,62 @@ async function findExtractedRoot(dir) {
   throw new Error("Açılan arşivde kök dizin bulunamadı");
 }
 
-/** JRE home'u bulur (macOS'ta Contents/Home, diğerlerinde kök). */
-async function resolveJreHome(extractedRoot) {
-  const macHome = join(extractedRoot, "Contents", "Home");
-  try {
-    if ((await stat(macHome)).isDirectory()) return macHome;
-  } catch {
-    /* macOS dışı — kökü kullan */
+/** Bir dizin gerçek bir JRE home mu? (`bin/java[.exe]` içeriyor mu) */
+async function isJreHome(dir) {
+  for (const exe of ["java", "java.exe"]) {
+    try {
+      if ((await stat(join(dir, "bin", exe))).isFile()) return true;
+    } catch {
+      /* yok — diğer adı dene */
+    }
   }
-  return extractedRoot;
+  return false;
 }
 
-async function main() {
-  const override = parseArgs();
-  const { apiOs, apiArch } = detectTarget(override);
+/**
+ * JRE home'u bulur. Dağıtıma göre yapı değişir:
+ *   • Adoptium macOS:  <root>/Contents/Home
+ *   • Azul Zulu macOS: <root>/zulu-N.jre/Contents/Home
+ *   • Linux/Windows:   <root>
+ * `bin/java` içeren ilk dizini BFS ile arayarak tüm bu yapıları karşılar.
+ */
+async function resolveJreHome(extractedRoot) {
+  const queue = [extractedRoot];
+  while (queue.length > 0) {
+    const dir = queue.shift();
+    if (await isJreHome(dir)) return dir;
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) queue.push(join(dir, entry.name));
+    }
+  }
+  throw new Error(`JRE home bulunamadı (bin/java yok): ${extractedRoot}`);
+}
+
+/** Tek bir JRE sürümünü indirir, normalize eder ve `resources/<dir>`'e yerleştirir. */
+async function fetchOne({ version, dir }, apiOs, apiArch) {
   const isZip = apiOs === "windows";
   const candidates = archCandidates(apiOs, apiArch);
+  const dest = join(RESOURCES_DIR, dir);
 
-  console.log(`» Hedef: ${apiOs}/${apiArch} (JRE 8)`);
+  console.log(`» Hedef: ${apiOs}/${apiArch} (JRE ${version} → resources/${dir})`);
 
   const work = await mkdtempSafe();
   const archive = join(work, isZip ? "jre.zip" : "jre.tar.gz");
 
   try {
-    await downloadFirstAvailable(apiOs, candidates, archive);
+    if (usesZulu(version, apiOs, apiArch)) {
+      const url = await resolveZuluUrl(version, apiOs, apiArch);
+      console.log(`↓ Azul Zulu (native ${apiArch}, JRE ${version}): ${url}`);
+      const res = await fetch(url, { redirect: "follow" });
+      if (!res.ok || !res.body) {
+        throw new Error(`Azul Zulu indirme başarısız (HTTP ${res.status})`);
+      }
+      await pipeline(Readable.fromWeb(res.body), createWriteStream(archive));
+      console.log(`✓ Arşiv kaydedildi: ${archive}`);
+    } else {
+      await downloadFirstAvailable(version, apiOs, candidates, archive);
+    }
 
     const extractDir = join(work, "extracted");
     await mkdir(extractDir, { recursive: true });
@@ -179,25 +276,44 @@ async function main() {
     const home = await resolveJreHome(root);
 
     // Hedefi temizle (yalnızca .gitkeep kalsın), sonra JRE home içeriğini kopyala.
-    await rm(JRE_DEST, { recursive: true, force: true });
-    await mkdir(JRE_DEST, { recursive: true });
-    await cp(home, JRE_DEST, { recursive: true });
+    await rm(dest, { recursive: true, force: true });
+    await mkdir(dest, { recursive: true });
+    await cp(home, dest, { recursive: true });
 
-    normalizePermissions(JRE_DEST);
+    normalizePermissions(dest);
 
     // Dizinin git tarafından izlenmeye devam etmesi için .gitkeep'i geri yaz
     // (JRE içeriği .gitignore ile hariç tutulur; klasörün kendisi korunmalı).
     await writeFile(
-      join(JRE_DEST, ".gitkeep"),
-      "Paketlenmiş JRE 1.8 dizini. İçerik `pnpm fetch-jre` ile doldurulur ve\n" +
+      join(dest, ".gitkeep"),
+      `Paketlenmiş JRE ${version} dizini. İçerik \`pnpm fetch-jre\` ile doldurulur ve\n` +
         ".gitignore ile sürüm kontrolünden hariç tutulur; yalnızca bu dosya izlenir.\n",
     );
 
-    console.log(`✓ JRE normalize edildi → ${JRE_DEST}`);
-    const javaBin = join(JRE_DEST, "bin", apiOs === "windows" ? "java.exe" : "java");
+    const javaBin = join(dest, "bin", apiOs === "windows" ? "java.exe" : "java");
+    console.log(`✓ JRE ${version} normalize edildi → ${dest}`);
     console.log(`  Doğrulama: ${javaBin}`);
   } finally {
     await rm(work, { recursive: true, force: true });
+  }
+}
+
+async function main() {
+  const override = parseArgs();
+  const { apiOs, apiArch } = detectTarget(override);
+
+  // `--version` verildiyse yalnız o sürümü, aksi hâlde tüm hedefleri indir.
+  const targets = override.version
+    ? JRE_TARGETS.filter((t) => t.version === override.version)
+    : JRE_TARGETS;
+  if (targets.length === 0) {
+    throw new Error(
+      `Bilinmeyen sürüm: ${override.version}. Geçerli: ${JRE_TARGETS.map((t) => t.version).join(", ")}`,
+    );
+  }
+
+  for (const target of targets) {
+    await fetchOne(target, apiOs, apiArch);
   }
 }
 

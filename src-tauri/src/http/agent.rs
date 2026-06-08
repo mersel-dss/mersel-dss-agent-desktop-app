@@ -120,8 +120,7 @@ fn utf8_percent_encode(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for byte in value.as_bytes() {
         let c = *byte;
-        let unreserved = c.is_ascii_alphanumeric()
-            || matches!(c, b'-' | b'_' | b'.' | b'~');
+        let unreserved = c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.' | b'~');
         if unreserved {
             out.push(c as char);
         } else {

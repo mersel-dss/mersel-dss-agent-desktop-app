@@ -5,6 +5,7 @@
 
 import type {
   JavaInfo,
+  JavaRuntimeInfo,
   ReleaseInfo,
   ServiceKind,
   ServiceSnapshot,
@@ -13,6 +14,8 @@ import type {
 export interface ServiceGateway {
   /** Makinedeki Java runtime'ı tespit eder. */
   detectJava(): Promise<JavaInfo>;
+  /** Servislerin gerektirdiği her Java sürümü için runtime durumunu döner. */
+  detectJavaRuntimes(): Promise<JavaRuntimeInfo[]>;
   /** Tüm servislerin anlık durumunu döner. */
   listServices(): Promise<ServiceSnapshot[]>;
   /** Servisi sessiz (headless) modda başlatır, process pid döner. */
@@ -23,4 +26,11 @@ export interface ServiceGateway {
   latestRelease(kind: ServiceKind): Promise<ReleaseInfo>;
   /** En güncel jar'ı indirip kurar; kurulan jar yolunu döner. */
   installService(kind: ServiceKind): Promise<string>;
+  /**
+   * Servisi en güncel sürüme getirir: gerekiyorsa indirir ve çalışıyorsa yeni
+   * sürümle yeniden başlatır. Güncelleme uygulandıysa `true` döner.
+   */
+  updateService(kind: ServiceKind): Promise<boolean>;
+  /** Servis başlatma sürecinin stdout/stderr log çıktısını döner. */
+  readLaunchLogs(kind: ServiceKind, lines?: number): Promise<string>;
 }

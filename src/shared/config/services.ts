@@ -11,6 +11,8 @@ export interface ServiceMeta {
   description: string;
   defaultPort: number;
   repoUrl: string;
+  packageLabel?: string;
+  docsPath?: string;
 }
 
 export const SERVICE_META: Record<ServiceKind, ServiceMeta> = {
@@ -32,6 +34,31 @@ export const SERVICE_META: Record<ServiceKind, ServiceMeta> = {
     defaultPort: 8086,
     repoUrl: "https://github.com/mersel-dss/mersel-dss-verifier-api-java",
   },
+  xslt: {
+    kind: "xslt",
+    displayName: "Önizleme Servisi",
+    shortName: "Önizleme",
+    description:
+      "e-Fatura, e-Arşiv ve e-İrsaliye XML'lerini Saxon XSLT ile kâğıttaki gibi HTML'e dönüştürür.",
+    defaultPort: 8080,
+    repoUrl: "https://github.com/mersel-os/ebelge-xslt-service",
+  },
+  "html-to-pdf": {
+    kind: "html-to-pdf",
+    displayName: "PDF Dönüştürme Servisi",
+    shortName: "PDF Servisi",
+    description:
+      "HTML önizlemelerini Playwright Chromium ile platform bağımsız PDF çıktısına dönüştürür.",
+    defaultPort: 5090,
+    repoUrl: "https://github.com/mersel-os/html-to-pdf",
+    packageLabel: "Paket",
+    docsPath: "/scalar/v1",
+  },
 };
 
-export const SERVICE_KINDS: ServiceKind[] = ["agent", "verifier"];
+export const SERVICE_KINDS: ServiceKind[] = [
+  "agent",
+  "verifier",
+  "xslt",
+  "html-to-pdf",
+];

@@ -30,3 +30,14 @@ futures-util = "0.3"
 quick-xml = "0.37"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+flate2 = "1"
+tar = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+# macOS: WKWebView.createPDF ile uygulama içi (tek tıkla) PDF dışa aktarımı için
+# native köprü. Diğer platformlarda gerekmez.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-web-kit = { version = "0.3", features = ["WKWebView", "WKPDFConfiguration", "block2"] }
+objc2-foundation = { version = "0.3", features = ["NSData", "NSError"] }
+block2 = "0.6"

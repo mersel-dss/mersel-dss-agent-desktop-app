@@ -5,8 +5,8 @@ use serde::{Serialize, Serializer};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
-    #[error("Java runtime bulunamadı. Lütfen Java 8 veya üzeri kurun.")]
-    JavaNotFound,
+    #[error("'{service}' servisi için Java {required}+ gereklidir; uygun bir Java runtime bulunamadı. Uygulamayı paketli JRE ile yeniden derleyin ya da sisteminize Java {required} kurun.")]
+    JavaVersionUnsatisfied { service: String, required: u32 },
 
     #[error("Servis jar dosyası bulunamadı: {0}")]
     JarNotFound(String),

@@ -8,6 +8,7 @@ import type { ServiceKind } from "@/domain/services/types";
 
 export const serviceKeys = {
   java: ["java"] as const,
+  javaRuntimes: ["java-runtimes"] as const,
   list: ["services"] as const,
   release: (kind: ServiceKind) => ["release", kind] as const,
 };
@@ -17,6 +18,15 @@ export function useJava() {
   return useQuery({
     queryKey: serviceKeys.java,
     queryFn: () => container.services.detectJava(),
+    staleTime: 60_000,
+  });
+}
+
+/** Servislerin gerektirdiği her Java sürümü için ayrı runtime durumu. */
+export function useJavaRuntimes() {
+  return useQuery({
+    queryKey: serviceKeys.javaRuntimes,
+    queryFn: () => container.services.detectJavaRuntimes(),
     staleTime: 60_000,
   });
 }
@@ -96,5 +106,34 @@ export function useInstallService() {
   return useMutation({
     mutationFn: (kind: ServiceKind) => container.services.installService(kind),
     onSuccess: () => qc.invalidateQueries({ queryKey: serviceKeys.list }),
+  });
+}
+
+/**
+ * Servisi en güncel sürüme getirir (indir + çalışıyorsa yeniden başlat).
+ * Yeni sürüm tespit edildiğinde otomatik tetiklenmek üzere kullanılır.
+ */
+export function useUpdateService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (kind: ServiceKind) => container.services.updateService(kind),
+    onSuccess: (_updated, kind) => {
+      qc.invalidateQueries({ queryKey: serviceKeys.list });
+      qc.invalidateQueries({ queryKey: serviceKeys.release(kind) });
+    },
+  });
+}
+
+export const launchLogKeys = {
+  logs: (kind: ServiceKind) => ["launch-logs", kind] as const,
+};
+
+export function useServiceLaunchLogs(kind: ServiceKind, enabled = true) {
+  return useQuery({
+    queryKey: launchLogKeys.logs(kind),
+    queryFn: () => container.services.readLaunchLogs(kind),
+    enabled,
+    refetchInterval: 3000,
+    staleTime: 0,
   });
 }

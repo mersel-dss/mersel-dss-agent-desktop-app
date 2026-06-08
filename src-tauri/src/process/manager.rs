@@ -1,10 +1,11 @@
-//! Java servis süreçlerinin yaşam döngüsü yöneticisi.
-//! Spawn edilen `java -jar ...` process'lerini tutar, başlatır ve durdurur.
+//! Yönetilen servis süreçlerinin yaşam döngüsü yöneticisi.
+//! Spawn edilen Java jar ve native servis process'lerini tutar, başlatır ve durdurur.
 
 use crate::config::ServiceDescriptor;
 use crate::error::{AppError, AppResult};
 use crate::models::ServiceKind;
 use std::collections::HashMap;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
@@ -19,7 +20,8 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 pub struct RunningService {
     pub child: Child,
     pub port: u16,
-    pub jar_path: PathBuf,
+    pub artifact_path: PathBuf,
+    pub launch_log_path: Option<PathBuf>,
 }
 
 /// Tüm yönetilen servislerin process tablosu.
@@ -33,29 +35,65 @@ impl ServiceManager {
         Self::default()
     }
 
-    /// Bir servisi tamamen sessiz (headless) modda başlatır. Zaten çalışıyorsa hata döner.
-    pub fn start(
+    fn prepare_launch_log(path: &Path) -> std::io::Result<File> {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        File::create(path)
+    }
+
+    /// Bir Java servisini tamamen sessiz (headless) modda başlatır. Zaten çalışıyorsa hata döner.
+    /// `launch_log_path` verilirse stdout + stderr bu dosyaya yazılır.
+    pub fn start_java(
         &mut self,
         descriptor: &ServiceDescriptor,
         java_exe: &str,
         jar_path: &Path,
         port: u16,
+        assets_dir: Option<&Path>,
+        launch_log_path: Option<&Path>,
     ) -> AppResult<u32> {
         if self.is_running(descriptor.kind) {
-            return Err(AppError::AlreadyRunning(descriptor.display_name.to_string()));
+            return Err(AppError::AlreadyRunning(
+                descriptor.display_name.to_string(),
+            ));
         }
         if !jar_path.exists() {
             return Err(AppError::JarNotFound(jar_path.display().to_string()));
         }
 
         let mut command = Command::new(java_exe);
-        command.arg("-jar").arg(jar_path).arg(format!("--server.port={port}"));
-        configure_silent(&mut command, descriptor.kind);
-
+        command.arg("-Djava.awt.headless=true");
+        // Yalnız ortam değişkenlerini (ve gerekiyorsa JVM seçeneklerini) ayarlar;
+        // Spring uygulama argümanları jar'dan SONRA eklenir (aşağıya bkz.).
+        configure_silent_env(&mut command, descriptor.kind, assets_dir);
         command
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .stdin(Stdio::null());
+            .arg("-jar")
+            .arg(jar_path)
+            .arg(format!("--server.port={port}"));
+        // Spring Boot uygulama argümanları (örn. `--mersel.signer.ui.enabled=false`)
+        // mutlaka jar'dan sonra gelmelidir; aksi hâlde JVM bunları kendi seçeneği
+        // sanıp "Unrecognized option" ile başlatmayı tümden reddeder.
+        for arg in application_args(descriptor.kind) {
+            command.arg(arg);
+        }
+
+        if let Some(log) = launch_log_path {
+            if let Ok(file) = Self::prepare_launch_log(log) {
+                let stderr_file = file.try_clone().unwrap_or_else(|_| {
+                    std::fs::File::open(log).unwrap()
+                });
+                command.stdout(Stdio::from(file));
+                command.stderr(Stdio::from(stderr_file));
+            } else {
+                command.stdout(Stdio::null());
+                command.stderr(Stdio::null());
+            }
+        } else {
+            command.stdout(Stdio::null());
+            command.stderr(Stdio::null());
+        }
+        command.stdin(Stdio::null());
 
         #[cfg(windows)]
         command.creation_flags(CREATE_NO_WINDOW);
@@ -70,7 +108,75 @@ impl ServiceManager {
             RunningService {
                 child,
                 port,
-                jar_path: jar_path.to_path_buf(),
+                artifact_path: jar_path.to_path_buf(),
+                launch_log_path: launch_log_path.map(|p| p.to_path_buf()),
+            },
+        );
+        Ok(pid)
+    }
+
+    /// Native paketli bir servisi başlatır. Zaten çalışıyorsa hata döner.
+    /// `launch_log_path` verilirse stdout + stderr bu dosyaya yazılır.
+    pub fn start_native(
+        &mut self,
+        descriptor: &ServiceDescriptor,
+        executable_path: &Path,
+        port: u16,
+        launch_log_path: Option<&Path>,
+    ) -> AppResult<u32> {
+        if self.is_running(descriptor.kind) {
+            return Err(AppError::AlreadyRunning(
+                descriptor.display_name.to_string(),
+            ));
+        }
+        if !executable_path.exists() {
+            return Err(AppError::JarNotFound(executable_path.display().to_string()));
+        }
+
+        let mut command = Command::new(executable_path);
+        command
+            .env("ASPNETCORE_URLS", format!("http://127.0.0.1:{port}"))
+            .stdin(Stdio::null());
+
+        if let Some(log) = launch_log_path {
+            if let Ok(file) = Self::prepare_launch_log(log) {
+                let stderr_file = file.try_clone().unwrap_or_else(|_| {
+                    std::fs::File::open(log).unwrap()
+                });
+                command.stdout(Stdio::from(file));
+                command.stderr(Stdio::from(stderr_file));
+            } else {
+                command.stdout(Stdio::null());
+                command.stderr(Stdio::null());
+            }
+        } else {
+            command.stdout(Stdio::null());
+            command.stderr(Stdio::null());
+        }
+
+        if let Some(dir) = executable_path.parent() {
+            command.current_dir(dir);
+            let browsers = dir.join("ms-playwright");
+            if browsers.exists() {
+                command.env("PLAYWRIGHT_BROWSERS_PATH", browsers);
+            }
+        }
+
+        #[cfg(windows)]
+        command.creation_flags(CREATE_NO_WINDOW);
+
+        let child = command
+            .spawn()
+            .map_err(|e| AppError::ServiceStart(e.to_string()))?;
+
+        let pid = child.id();
+        self.running.insert(
+            descriptor.kind,
+            RunningService {
+                child,
+                port,
+                artifact_path: executable_path.to_path_buf(),
+                launch_log_path: launch_log_path.map(|p| p.to_path_buf()),
             },
         );
         Ok(pid)
@@ -101,7 +207,6 @@ impl ServiceManager {
         };
         match svc.child.try_wait() {
             Ok(Some(_)) => {
-                // Süreç sonlanmış.
                 self.running.remove(&kind);
                 false
             }
@@ -119,25 +224,65 @@ impl ServiceManager {
     }
 
     pub fn jar_path(&self, kind: ServiceKind) -> Option<PathBuf> {
-        self.running.get(&kind).map(|s| s.jar_path.clone())
+        self.running.get(&kind).map(|s| s.artifact_path.clone())
+    }
+
+    pub fn launch_log_path(&self, kind: ServiceKind) -> Option<PathBuf> {
+        self.running.get(&kind).and_then(|s| s.launch_log_path.clone())
     }
 }
 
-/// JVM/Spring argümanlarını tamamen sessiz (headless) moda göre yapılandırır.
-/// Headless JVM tüm Swing UI'ı (splash + tray + pencere) kapatır; PCSC/PKCS#11
-/// kart erişimi AWT kullanmadığından bundan etkilenmez.
-fn configure_silent(command: &mut Command, kind: ServiceKind) {
-    command.arg("-Djava.awt.headless=true");
+/// Bir servisin jar'dan SONRA eklenecek Spring Boot uygulama argümanlarını döner.
+/// Bunlar JVM seçeneği değil program argümanı olduğundan `-jar <jar>`'dan sonra
+/// gelmek zorundadır; aksi hâlde JVM "Unrecognized option" verip çöker.
+fn application_args(kind: ServiceKind) -> &'static [&'static str] {
+    match kind {
+        // İmza ajanını tamamen sessiz (headless) çalıştır: splash + tray + pencere
+        // kapalı. Verifier/XSLT bu bayrakları kullanmadığından boş döner.
+        ServiceKind::Agent => &[
+            "--mersel.signer.ui.enabled=false",
+            "--mersel.signer.ui.splash-enabled=false",
+            "--mersel.signer.ui.tray-enabled=false",
+            "--mersel.signer.ui.window-enabled=false",
+        ],
+        _ => &[],
+    }
+}
 
+/// Servisi tamamen sessiz (headless) çalıştırmak için ORTAM DEĞİŞKENLERİNİ (ve
+/// gerekiyorsa JVM seçeneklerini) ayarlar. Headless JVM tüm Swing UI'ı (splash +
+/// tray + pencere) kapatır; PCSC/PKCS#11 kart erişimi AWT kullanmadığından bundan
+/// etkilenmez. Spring uygulama argümanları için `application_args`'a bakın.
+fn configure_silent_env(command: &mut Command, kind: ServiceKind, assets_dir: Option<&Path>) {
     // UI bayrakları yalnız agent'ta anlamlı (verifier'da sessizce yok sayılır).
     if kind == ServiceKind::Agent {
         command
-            .arg("--mersel.signer.ui.enabled=false")
-            .arg("--mersel.signer.ui.splash-enabled=false")
-            .arg("--mersel.signer.ui.tray-enabled=false")
-            .arg("--mersel.signer.ui.window-enabled=false")
             // Spring kalkmadan önceki splash yalnızca env var okur.
             .env("MERSEL_AGENT_UI", "false")
             .env("MERSEL_AGENT_UI_SPLASH", "false");
+    }
+
+    // XSLT servisi hem HTML önizleme hem şema (XSD) + şematron doğrulaması yapar.
+    // Doğrulama için GİB resmi paketleri (e-Fatura/UBL-TR/e-Arşiv/e-Defter)
+    // gerekir; bu asset'leri kalıcı bir dış dizinde tutarız (external-path =
+    // sync target-path), böylece bir kez indirilince sonraki açılışlarda
+    // diskten okunur.
+    //
+    // Servisin tüm yapılandırması env ile geçilebilir (bkz. application.yml).
+    // Sync'i etkinleştirip "açılışta otomatik sync"i de açıyoruz: servisin kendi
+    // GibAutoSyncStartupListener'ı ApplicationReady'de asset dizini boşsa GİB
+    // paketlerini arka planda (virtual thread) indirir ve asset registry'yi
+    // reload eder. Böylece bizim ek bir admin/token çağrımıza gerek kalmaz;
+    // dizin doluysa (sonraki açılışlar) otomatik atlanır.
+    if kind == ServiceKind::Xslt {
+        if let Some(dir) = assets_dir {
+            let dir = dir.display().to_string();
+            command
+                .env("XSLT_ASSETS_EXTERNAL_PATH", &dir)
+                .env("XSLT_ASSETS_WATCH_ENABLED", "true")
+                .env("VALIDATION_ASSETS_GIB_SYNC_ENABLED", "true")
+                .env("VALIDATION_ASSETS_GIB_AUTO_SYNC", "true")
+                .env("VALIDATION_ASSETS_GIB_SYNC_PATH", &dir);
+        }
     }
 }

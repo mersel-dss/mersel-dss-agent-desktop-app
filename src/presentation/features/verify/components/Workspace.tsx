@@ -127,7 +127,7 @@ export function SegmentedToggle<T extends string>({
             type="button"
             onClick={() => onChange(opt.value)}
             className={cn(
-              "rounded-sm px-3 py-1.5 text-sm font-medium transition-colors duration-150",
+              "whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-colors duration-150",
               active
                 ? "bg-surface-raised text-foreground ring-1 ring-border"
                 : "text-fg-muted hover:text-foreground",

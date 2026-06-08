@@ -6,15 +6,20 @@
  */
 
 import { useState } from "react";
-import { FileSearch, ShieldCheck } from "lucide-react";
+import { CodeXml, FileSearch, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { errorMessage } from "@/shared/lib/errors";
+import { cn } from "@/shared/lib/utils";
 import { useVerifyDocument } from "@/application/verification/hooks";
+import { useService } from "@/application/services/hooks";
 import type { VerificationLevel } from "@/domain/verification/types";
 import { Button } from "@/presentation/components/ui/button";
 import { Label } from "@/presentation/components/ui/label";
 import { IconMedallion } from "@/presentation/components/common/IconMedallion";
 import { FileDropField } from "@/presentation/components/common/FileDropField";
+import { DocumentPreviewPanel } from "@/presentation/features/preview/DocumentPreviewPanel";
+import { DocumentValidationPanel } from "./DocumentValidationPanel";
+import { DocumentSourcePanel } from "./DocumentSourcePanel";
 import { SignatureResultView } from "./SignatureResultView";
 import { EnvelopeResultView } from "./EnvelopeResultView";
 import {
@@ -24,14 +29,21 @@ import {
   WorkspaceLayout,
 } from "./components/Workspace";
 
+type ResultTab = "verify" | "validate" | "preview";
+
 export function VerifyDocumentForm() {
   const verify = useVerifyDocument();
+  const xslt = useService("xslt");
   const [signedPath, setSignedPath] = useState<string | null>(null);
   const [originalPath, setOriginalPath] = useState<string | null>(null);
   const [level, setLevel] = useState<VerificationLevel>("COMPREHENSIVE");
+  const [resultTab, setResultTab] = useState<ResultTab>("verify");
+  // İmza/Şema/Önizleme tablarından bağımsız, üst seviye "ham XML kaynağı" görünümü.
+  const [showSource, setShowSource] = useState(false);
 
   const handleVerify = () => {
     if (!signedPath) return;
+    setResultTab("verify");
     verify.mutate(
       {
         signedPath,
@@ -114,7 +126,7 @@ export function VerifyDocumentForm() {
   );
 
   const data = verify.data;
-  const result = verify.isPending ? (
+  const verifyBody = verify.isPending ? (
     <ResultLoading />
   ) : data ? (
     data.kind === "envelope" && data.envelope ? (
@@ -139,6 +151,67 @@ export function VerifyDocumentForm() {
       description="Soldan bir imzalı doküman ya da e-Belge zarfı seçip “Doğrula”ya basın. Zarf otomatik tespit edilip içindeki tüm belgeler çözülür; sonra imza ağacı, sertifika zinciri ve adım-adım kontroller listelenir."
       highlights={["Otomatik zarf tespiti", "XAdES", "PAdES", "CAdES", "Çoklu belge", "Sertifika zinciri"]}
     />
+  );
+
+  // Doğrulama tamamlandıysa ve XSLT servisi çalışıyorsa, aynı dosya için
+  // "İmza ↔ Geçerlilik ↔ Önizleme" geçişi sun: imza doğrulaması, GİB şema/
+  // şematron geçerlilik kontrolü ve belgenin kâğıttaki görünümü tek ekranda.
+  const canInspect = !!data && !!signedPath && xslt.isRunning;
+  const activeTab = canInspect ? resultTab : "verify";
+  const sourceView = canInspect && showSource;
+  const result = (
+    <div className="flex h-full min-h-0 flex-col">
+      {canInspect ? (
+        <div className="mb-4 flex shrink-0 flex-wrap items-center gap-3">
+          <div className="w-fit max-w-full">
+            <SegmentedToggle
+              value={resultTab}
+              onChange={(v) => {
+                setResultTab(v);
+                setShowSource(false);
+              }}
+              options={[
+                { value: "verify", label: "İmza" },
+                { value: "validate", label: "Şema & Şematron Kontrolü" },
+                { value: "preview", label: "Önizleme" },
+              ]}
+            />
+          </div>
+          {/* Tabların en sağında: tüm tablardan bağımsız ham XML kaynağı geçişi. */}
+          <button
+            type="button"
+            onClick={() => setShowSource((s) => !s)}
+            aria-pressed={showSource}
+            className={cn(
+              "ml-auto flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[13px] font-medium transition-colors",
+              showSource
+                ? "border-[rgb(var(--accent))]/40 bg-brand-soft text-foreground"
+                : "border-border bg-surface-muted text-fg-muted hover:text-foreground",
+            )}
+            title="Belgenin ham XML kaynağını göster"
+          >
+            <CodeXml className="h-4 w-4" />
+            XML Kaynağını göster
+          </button>
+        </div>
+      ) : null}
+      <div
+        className={cn(
+          "min-h-0 flex-1",
+          sourceView || activeTab === "preview" ? "" : "overflow-y-auto",
+        )}
+      >
+        {sourceView ? (
+          <DocumentSourcePanel signedPath={signedPath!} />
+        ) : activeTab === "preview" ? (
+          <DocumentPreviewPanel signedPath={signedPath!} />
+        ) : activeTab === "validate" ? (
+          <DocumentValidationPanel signedPath={signedPath!} />
+        ) : (
+          verifyBody
+        )}
+      </div>
+    </div>
   );
 
   return <WorkspaceLayout input={input} result={result} />;

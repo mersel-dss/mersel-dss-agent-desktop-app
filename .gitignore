@@ -12,9 +12,12 @@ dist
 dist-ssr
 *.local
 
-# Paketlenmiş JRE (build sırasında `pnpm fetch-jre` ile indirilir)
+# Paketlenmiş JRE'ler (build sırasında `pnpm fetch-jre` ile indirilir)
+# jre = Java 8 (imza/doğrulama), jre21 = Java 21 (XSLT önizleme)
 src-tauri/resources/jre/*
 !src-tauri/resources/jre/.gitkeep
+src-tauri/resources/jre21/*
+!src-tauri/resources/jre21/.gitkeep
 
 # Tauri updater imza anahtarları (GİZLİ — repoya commit'lenmemeli)
 src-tauri/.tauri/

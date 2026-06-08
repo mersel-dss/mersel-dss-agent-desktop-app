@@ -5,6 +5,7 @@
 import type { ServiceGateway } from "@/domain/services/ports";
 import type {
   JavaInfo,
+  JavaRuntimeInfo,
   ReleaseInfo,
   ServiceKind,
   ServiceSnapshot,
@@ -14,6 +15,10 @@ import { call } from "./client";
 export class TauriServiceGateway implements ServiceGateway {
   detectJava(): Promise<JavaInfo> {
     return call<JavaInfo>("detect_java");
+  }
+
+  detectJavaRuntimes(): Promise<JavaRuntimeInfo[]> {
+    return call<JavaRuntimeInfo[]>("detect_java_runtimes");
   }
 
   listServices(): Promise<ServiceSnapshot[]> {
@@ -34,5 +39,16 @@ export class TauriServiceGateway implements ServiceGateway {
 
   installService(kind: ServiceKind): Promise<string> {
     return call<string>("install_service", { kind });
+  }
+
+  updateService(kind: ServiceKind): Promise<boolean> {
+    return call<boolean>("update_service", { kind });
+  }
+
+  readLaunchLogs(kind: ServiceKind, lines?: number): Promise<string> {
+    return call<string>("read_service_launch_logs", {
+      kind,
+      lines: lines ?? 500,
+    });
   }
 }

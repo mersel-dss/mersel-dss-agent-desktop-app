@@ -1,6 +1,6 @@
 //! GitHub Releases üzerinden servis jar'larını keşfeder ve indirir.
 
-use crate::config::ServiceDescriptor;
+use crate::config::{self, ServiceDescriptor, ServiceRuntime};
 use crate::error::{AppError, AppResult};
 use crate::models::{ChangelogEntry, ReleaseAsset, ReleaseInfo};
 use futures_util::StreamExt;
@@ -48,32 +48,55 @@ fn parse_release(json: &serde_json::Value, descriptor: &ServiceDescriptor) -> Re
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let jar_asset = json
-        .get("assets")
-        .and_then(|v| v.as_array())
-        .and_then(|assets| {
-            assets.iter().find_map(|a| {
-                let asset_name = a.get("name")?.as_str()?;
-                if asset_name.starts_with(descriptor.jar_prefix) && asset_name.ends_with(".jar") {
-                    Some(ReleaseAsset {
-                        name: asset_name.to_string(),
-                        download_url: a
-                            .get("browser_download_url")?
-                            .as_str()?
-                            .to_string(),
-                        size: a.get("size").and_then(|s| s.as_u64()).unwrap_or(0),
-                    })
-                } else {
-                    None
-                }
+    let jar_asset = descriptor.jar_prefix().and_then(|jar_prefix| {
+        json.get("assets")
+            .and_then(|v| v.as_array())
+            .and_then(|assets| {
+                assets.iter().find_map(|a| {
+                    let asset_name = a.get("name")?.as_str()?;
+                    if asset_name.starts_with(jar_prefix) && asset_name.ends_with(".jar") {
+                        Some(ReleaseAsset {
+                            name: asset_name.to_string(),
+                            download_url: a.get("browser_download_url")?.as_str()?.to_string(),
+                            size: a.get("size").and_then(|s| s.as_u64()).unwrap_or(0),
+                        })
+                    } else {
+                        None
+                    }
+                })
             })
-        });
+    });
+
+    let package_asset = descriptor.package_prefix().and_then(|prefix| {
+        let suffix = match descriptor.runtime {
+            ServiceRuntime::Java { .. } => unreachable!(),
+            ServiceRuntime::NativePackage { .. } => config::native_package_suffix()?,
+            ServiceRuntime::NativeSingleFile { .. } => config::native_single_file_suffix()?,
+        };
+        json.get("assets")
+            .and_then(|v| v.as_array())
+            .and_then(|assets| {
+                assets.iter().find_map(|a| {
+                    let asset_name = a.get("name")?.as_str()?;
+                    if asset_name.starts_with(prefix) && asset_name.ends_with(suffix) {
+                        Some(ReleaseAsset {
+                            name: asset_name.to_string(),
+                            download_url: a.get("browser_download_url")?.as_str()?.to_string(),
+                            size: a.get("size").and_then(|s| s.as_u64()).unwrap_or(0),
+                        })
+                    } else {
+                        None
+                    }
+                })
+            })
+    });
 
     ReleaseInfo {
         tag,
         name,
         published_at,
         jar_asset,
+        package_asset,
     }
 }
 
@@ -84,9 +107,7 @@ pub async fn list_releases(
     name: &str,
     per_page: u32,
 ) -> AppResult<Vec<ChangelogEntry>> {
-    let url = format!(
-        "https://api.github.com/repos/{owner}/{name}/releases?per_page={per_page}"
-    );
+    let url = format!("https://api.github.com/repos/{owner}/{name}/releases?per_page={per_page}");
     let resp = client()?
         .get(&url)
         .header("Accept", "application/vnd.github+json")
@@ -133,11 +154,7 @@ fn parse_changelog_entry(json: &serde_json::Value) -> Option<ChangelogEntry> {
 }
 
 /// Bir asset'i hedef dosyaya stream ederek indirir. İlerleme `on_progress` ile bildirilir.
-pub async fn download_asset<F>(
-    asset: &ReleaseAsset,
-    dest: &Path,
-    on_progress: F,
-) -> AppResult<()>
+pub async fn download_asset<F>(asset: &ReleaseAsset, dest: &Path, on_progress: F) -> AppResult<()>
 where
     F: Fn(u64, Option<u64>),
 {

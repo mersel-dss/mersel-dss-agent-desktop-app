@@ -2,7 +2,7 @@
  * Servis runtime domain tipleri. Rust `models.rs` ile birebir eşleşir.
  */
 
-export type ServiceKind = "agent" | "verifier";
+export type ServiceKind = "agent" | "verifier" | "xslt" | "html-to-pdf";
 
 export type ServiceState =
   | "not-installed"
@@ -42,6 +42,29 @@ export interface JavaInfo {
   bundled: boolean;
 }
 
+/**
+ * Servislerin gerektirdiği belirli bir Java sürümü için çözülen runtime durumu.
+ * Dashboard'da her gerekli sürüm (örn. Java 8, Java 21) ayrı satır gösterir.
+ */
+export interface JavaRuntimeInfo {
+  /** Bu yuvanın gerektirdiği minimum Java major sürümü (örn. 8, 21). */
+  requiredMajor: number;
+  /** Kısa etiket (örn. "Java 21"). */
+  label: string;
+  /** Bu runtime'ı kullanan servis(ler). */
+  purpose: string;
+  /** Gereksinimi karşılayan bir runtime bulundu mu? */
+  available: boolean;
+  /** Çözülen runtime'ın tam sürümü (varsa). */
+  version: string | null;
+  /** Çözülen runtime'ın major sürümü (varsa). */
+  major: number | null;
+  /** Kaynak (paketlenmiş JRE / JAVA_HOME / PATH). */
+  source: JavaSource | null;
+  /** Uygulamayla paketlenmiş gömülü JRE mi kullanılıyor? */
+  bundled: boolean;
+}
+
 export interface ReleaseAsset {
   name: string;
   downloadUrl: string;
@@ -53,6 +76,7 @@ export interface ReleaseInfo {
   name: string | null;
   publishedAt: string | null;
   jarAsset: ReleaseAsset | null;
+  packageAsset: ReleaseAsset | null;
 }
 
 export interface DownloadProgress {

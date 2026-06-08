@@ -125,8 +125,9 @@ export function BootSplash() {
           Çalışma alanınız hazırlanıyor
         </h1>
         <p className="mt-1.5 max-w-xs text-center text-[13px] leading-relaxed text-fg-muted">
-          En iyi deneyim için imza ve doğrulama servislerinizi sizin yerinize
-          ayarlıyoruz. Bu yalnızca birkaç saniye sürer.
+          İmza, doğrulama, önizleme ve PDF dışa aktarımı gibi pek çok deneyimi
+          tek uygulamada topladığımız için ilk hazırlık biraz uzun sürebilir.
+          Bir kez hazırlandıktan sonra diğer açılışlar çok hızlı olacaktır.
         </p>
 
         {/* Adım listesi */}

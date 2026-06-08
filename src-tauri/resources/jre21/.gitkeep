@@ -1,2 +1,2 @@
-Paketlenmiş JRE 8 dizini. İçerik `pnpm fetch-jre` ile doldurulur ve
+Paketlenmiş JRE 21 dizini. İçerik `pnpm fetch-jre` ile doldurulur ve
 .gitignore ile sürüm kontrolünden hariç tutulur; yalnızca bu dosya izlenir.

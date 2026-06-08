@@ -19,26 +19,25 @@ export function DashboardPage() {
     <ScrollPage className="space-y-5">
       <PageHeader
         title="Genel Bakış"
-        description="Yerel imza ajanı ve doğrulama servisinin durumu."
+        description="Yerel imza ajanı, doğrulama ve önizleme servislerinin durumu."
       />
       <DashboardHero />
 
-      <div className="grid items-start gap-4 xl:grid-cols-[1fr_340px]">
-        <div className="grid gap-4 sm:grid-cols-2">
-          {isLoading
-            ? [0, 1].map((i) => (
-                <Skeleton key={i} className="h-72 w-full rounded-lg" />
-              ))
-            : data?.map((service) => (
-                <ServiceControlCard
-                  key={service.kind}
-                  service={service}
-                  progress={progress}
-                />
-              ))}
-        </div>
+      <JavaStatusCard />
 
-        <JavaStatusCard />
+      {/* Yönetilen servisler — geniş ekranda üç sütun (her servis bir kart). */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {isLoading
+          ? [0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-72 w-full rounded-lg" />
+            ))
+          : data?.map((service) => (
+              <ServiceControlCard
+                key={service.kind}
+                service={service}
+                progress={progress}
+              />
+            ))}
       </div>
     </ScrollPage>
   );

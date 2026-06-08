@@ -2,7 +2,7 @@
 //! Ayrıca uygulama açılışında çalışan otomatik kurulum/güncelleme/başlatma akışı.
 
 use super::app_data_dir;
-use crate::config::{self, descriptor_for, ServiceDescriptor};
+use crate::config::{self, descriptor_for, ServiceDescriptor, ServiceRuntime};
 use crate::download::github;
 use crate::download::version::{self, InstalledMeta};
 use crate::error::{AppError, AppResult};
@@ -16,12 +16,26 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-/// Arka plan güncelleyicinin GitHub'ı yoklama aralığı.
-const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(3 * 60 * 60);
+/// Arka plan güncelleyicinin GitHub'ı yoklama aralığı. Güncellemeler otomatik
+/// uygulandığından (indir + çalışıyorsa yeniden başlat) aralık kısa tutulur ki
+/// yeni bir servis sürümü çıktığında kısa sürede devreye girsin.
+const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(30 * 60);
 
 /// Frontend'in dinlediği event adları (TS tarafıyla birebir eşleşmelidir).
 const EVENT_DOWNLOAD_PROGRESS: &str = "download-progress";
 const EVENT_SERVICE_UPDATED: &str = "service-updated";
+
+struct EnsureLatestOutcome {
+    updated: bool,
+    start_after_update: bool,
+}
+
+fn stamp() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
 
 /// Tüm servislerin anlık durumunu döner.
 #[tauri::command]
@@ -39,16 +53,18 @@ pub async fn list_services(
         for descriptor in config::ALL_SERVICES {
             let running = manager.is_running(descriptor.kind);
             let pid = manager.pid(descriptor.kind);
-            let port = manager.port(descriptor.kind).unwrap_or(descriptor.default_port);
-            let jar_path = manager
+            let port = manager
+                .port(descriptor.kind)
+                .unwrap_or(descriptor.default_port);
+            let artifact_path = manager
                 .jar_path(descriptor.kind)
-                .or_else(|| jar::resolve_jar(&config::jars_dir(&data_dir, descriptor.kind), &descriptor));
+                .or_else(|| resolve_installed_artifact(&data_dir, &descriptor));
             let installed_tag = version::read(&data_dir, descriptor.kind).map(|m| m.tag);
-            sync_info.push((descriptor, running, pid, port, jar_path, installed_tag));
+            sync_info.push((descriptor, running, pid, port, artifact_path, installed_tag));
         }
     }
 
-    for (descriptor, running, pid, port, jar_path, installed_tag) in sync_info {
+    for (descriptor, running, pid, port, artifact_path, installed_tag) in sync_info {
         let mut externally_managed = false;
         let state_value = if running {
             if http::is_reachable(port).await {
@@ -60,7 +76,7 @@ pub async fn list_services(
             // Uygulama başlatmadı ama varsayılan port yanıt veriyor → dışarıdan çalışıyor.
             externally_managed = true;
             ServiceState::Running
-        } else if jar_path.is_some() {
+        } else if artifact_path.is_some() {
             ServiceState::Stopped
         } else {
             ServiceState::NotInstalled
@@ -79,7 +95,7 @@ pub async fn list_services(
             state: state_value,
             base_url: http::base_url(report_port),
             port: report_port,
-            jar_path: jar_path.map(|p| p.display().to_string()),
+            jar_path: artifact_path.map(|p| p.display().to_string()),
             installed_tag,
             pid,
             externally_managed,
@@ -90,28 +106,55 @@ pub async fn list_services(
     Ok(snapshots)
 }
 
-/// Java çalıştırılabilirini (paketlenmiş JRE öncelikli) ve servis jar yolunu çözer.
-async fn resolve_launch(app: &AppHandle, kind: ServiceKind) -> AppResult<(String, PathBuf)> {
+fn resolve_native_executable(app_data_dir: &Path, kind: ServiceKind) -> Option<PathBuf> {
+    let exe = config::native_current_dir(app_data_dir, kind).join(config::native_executable_name());
+    exe.exists().then_some(exe)
+}
+
+fn resolve_installed_artifact(
+    app_data_dir: &Path,
+    descriptor: &ServiceDescriptor,
+) -> Option<PathBuf> {
+    match descriptor.runtime {
+        ServiceRuntime::Java { .. } => {
+            jar::resolve_jar(&config::jars_dir(app_data_dir, descriptor.kind), descriptor)
+        }
+        ServiceRuntime::NativePackage { .. } => {
+            resolve_native_executable(app_data_dir, descriptor.kind)
+        }
+        ServiceRuntime::NativeSingleFile { .. } => {
+            let exe = config::single_file_binary_path(app_data_dir, descriptor.kind);
+            exe.exists().then_some(exe)
+        }
+    }
+}
+
+/// Java çalıştırılabilirini ve servis jar yolunu çözer.
+///
+/// Her servis **kendi minimum Java sürümünü** ister (imza/doğrulama Java 8,
+/// XSLT önizleme Java 21). Bu yüzden servise uygun paketli JRE önceliklenir
+/// (Java 21 için `jre21`, diğerleri için `jre`) ve eşiği karşılayan ilk runtime
+/// (paketli → `JAVA_HOME` → `PATH`) seçilir. Uygun runtime yoksa, kullanıcıya
+/// hangi Java sürümünün gerektiğini bildiren açık bir hata döner.
+async fn resolve_java_launch(app: &AppHandle, kind: ServiceKind) -> AppResult<(String, PathBuf)> {
     let descriptor = descriptor_for(kind);
     let data_dir = app_data_dir(app)?;
-    let jre_dir = config::bundled_jre_dir(app);
+    let min_major = descriptor
+        .min_java_major()
+        .ok_or_else(|| AppError::Invalid("Bu servis Java runtime kullanmıyor.".to_string()))?;
+    let preferred_jre = config::bundled_jre_dir_for(app, min_major);
 
-    let detect_jre = jre_dir.clone();
-    let java_info = tokio::task::spawn_blocking(move || java::detect(detect_jre))
-        .await
-        .map_err(|e| AppError::ServiceStart(e.to_string()))?;
-    if !java_info.available {
-        return Err(AppError::JavaNotFound);
-    }
-    // Daemon'u konsolsuz başlatmak için uygun çalıştırılabiliri seç (Windows: javaw).
-    let launcher_jre = jre_dir.clone();
+    // Daemon'u konsolsuz başlatmak için, minimum sürümü karşılayan launcher'ı seç.
+    let launcher_jre = preferred_jre.clone();
     let java_exe = tokio::task::spawn_blocking(move || {
-        java::resolve_java_launcher(launcher_jre.as_deref())
+        java::resolve_service_launcher(launcher_jre.as_deref(), min_major)
     })
     .await
     .map_err(|e| AppError::ServiceStart(e.to_string()))?
-    .or(java_info.executable)
-    .ok_or(AppError::JavaNotFound)?;
+    .ok_or_else(|| AppError::JavaVersionUnsatisfied {
+        service: descriptor.display_name.to_string(),
+        required: min_major,
+    })?;
 
     let jars_dir = config::jars_dir(&data_dir, kind);
     let jar_path = jar::resolve_jar(&jars_dir, &descriptor)
@@ -120,17 +163,68 @@ async fn resolve_launch(app: &AppHandle, kind: ServiceKind) -> AppResult<(String
     Ok((java_exe, jar_path))
 }
 
+fn resolve_native_launch(app: &AppHandle, kind: ServiceKind) -> AppResult<PathBuf> {
+    let data_dir = app_data_dir(app)?;
+    resolve_native_executable(&data_dir, kind).ok_or_else(|| {
+        AppError::JarNotFound(
+            config::native_current_dir(&data_dir, kind)
+                .join(config::native_executable_name())
+                .display()
+                .to_string(),
+        )
+    })
+}
+
 /// Bir servisi çözümler (Java + jar), tercih edilen porttan başlayarak ilk boş
 /// porta yerleşir ve manager üzerinden başlatır. Üç başlatma noktasının
 /// (komut, otomatik başlatma, güncelleme sonrası yeniden başlatma) ortak çekirdeği.
 async fn launch_service(app: &AppHandle, kind: ServiceKind) -> AppResult<u32> {
     let descriptor = descriptor_for(kind);
-    let (java_exe, jar_path) = resolve_launch(app, kind).await?;
+    let data_dir = app_data_dir(app)?;
     let port = net::find_free_port(descriptor.default_port);
+    let log_path = config::launch_log_path(&data_dir, kind);
 
-    let state = app.state::<AppState>();
-    let mut manager = state.manager.lock().await;
-    manager.start(&descriptor, &java_exe, &jar_path, port)
+    match descriptor.runtime {
+        ServiceRuntime::Java { .. } => {
+            let (java_exe, jar_path) = resolve_java_launch(app, kind).await?;
+
+            // XSLT servisi GİB doğrulama asset'lerini (XSD + schematron) kalıcı bir
+            // dizinde tutar; başlatmadan önce var olduğundan emin ol.
+            let assets_dir = if kind == ServiceKind::Xslt {
+                let dir = config::xslt_assets_dir(&data_dir);
+                let _ = tokio::fs::create_dir_all(&dir).await;
+                Some(dir)
+            } else {
+                None
+            };
+
+            let state = app.state::<AppState>();
+            let mut manager = state.manager.lock().await;
+            manager.start_java(
+                &descriptor,
+                &java_exe,
+                &jar_path,
+                port,
+                assets_dir.as_deref(),
+                Some(&log_path),
+            )
+        }
+        ServiceRuntime::NativePackage { .. } => {
+            let executable_path = resolve_native_launch(app, kind)?;
+            let state = app.state::<AppState>();
+            let mut manager = state.manager.lock().await;
+            manager.start_native(&descriptor, &executable_path, port, Some(&log_path))
+        }
+        ServiceRuntime::NativeSingleFile { .. } => {
+            let executable_path = config::single_file_binary_path(&data_dir, kind);
+            if !executable_path.exists() {
+                return Err(AppError::JarNotFound(executable_path.display().to_string()));
+            }
+            let state = app.state::<AppState>();
+            let mut manager = state.manager.lock().await;
+            manager.start_native(&descriptor, &executable_path, port, Some(&log_path))
+        }
+    }
 }
 
 /// Bir servisi sessiz (headless) modda, ilk boş porttan başlatır.
@@ -162,6 +256,19 @@ pub async fn install_service(app: AppHandle, kind: ServiceKind) -> AppResult<Str
     download_release(&app, kind, &release).await
 }
 
+/// Bir servisi en güncel sürüme getirir: gerekiyorsa yeni jar'ı indirir ve
+/// servis bu uygulama tarafından çalışıyorsa yeni sürümle yeniden başlatır.
+/// Zaten güncelse hiçbir şey yapmaz. Dönüş: güncelleme uygulandıysa `true`.
+/// Frontend, bir güncelleme tespit ettiğinde bunu otomatik çağırır.
+#[tauri::command]
+pub async fn update_service(app: AppHandle, kind: ServiceKind) -> AppResult<bool> {
+    let outcome = ensure_latest(&app, kind).await?;
+    if outcome.updated {
+        on_service_updated(&app, kind, outcome.start_after_update).await;
+    }
+    Ok(outcome.updated)
+}
+
 /// Bir release'in jar asset'ini indirir, sürüm üst verisini yazar ve eski jar'ları temizler.
 async fn download_release(
     app: &AppHandle,
@@ -169,6 +276,23 @@ async fn download_release(
     release: &ReleaseInfo,
 ) -> AppResult<String> {
     let descriptor = descriptor_for(kind);
+    match descriptor.runtime {
+        ServiceRuntime::Java { .. } => download_java_release(app, kind, &descriptor, release).await,
+        ServiceRuntime::NativePackage { .. } => {
+            download_native_release(app, kind, &descriptor, release).await
+        }
+        ServiceRuntime::NativeSingleFile { .. } => {
+            download_single_file_release(app, kind, release).await
+        }
+    }
+}
+
+async fn download_java_release(
+    app: &AppHandle,
+    kind: ServiceKind,
+    descriptor: &ServiceDescriptor,
+    release: &ReleaseInfo,
+) -> AppResult<String> {
     let data_dir = app_data_dir(app)?;
     let asset = release
         .jar_asset
@@ -211,9 +335,222 @@ async fn download_release(
         },
     )
     .await;
-    cleanup_old_jars(&config::jars_dir(&data_dir, kind), &descriptor, &asset.name);
+    cleanup_old_jars(&config::jars_dir(&data_dir, kind), descriptor, &asset.name);
 
     Ok(dest.display().to_string())
+}
+
+async fn download_native_release(
+    app: &AppHandle,
+    kind: ServiceKind,
+    _descriptor: &ServiceDescriptor,
+    release: &ReleaseInfo,
+) -> AppResult<String> {
+    let data_dir = app_data_dir(app)?;
+    let asset = release.package_asset.clone().ok_or_else(|| {
+        let suffix = config::native_package_suffix().unwrap_or("<desteklenmeyen-platform>");
+        AppError::Invalid(format!(
+            "Release içinde bu platforma uygun paket bulunamadı ({suffix})"
+        ))
+    })?;
+
+    let service_dir = config::jars_dir(&data_dir, kind);
+    let archive_path = service_dir.join(&asset.name);
+
+    let app_handle = app.clone();
+    github::download_asset(&asset, &archive_path, move |downloaded, total| {
+        let _ = app_handle.emit(
+            EVENT_DOWNLOAD_PROGRESS,
+            DownloadProgress {
+                kind,
+                downloaded,
+                total,
+                done: total.map(|t| downloaded >= t).unwrap_or(false),
+            },
+        );
+    })
+    .await?;
+
+    let staging_dir = service_dir.join(format!("staging-{}", stamp()));
+    let current_dir = config::native_current_dir(&data_dir, kind);
+    let archive_for_extract = archive_path.clone();
+    let staging_for_extract = staging_dir.clone();
+    let current_for_extract = current_dir.clone();
+    let asset_name = asset.name.clone();
+
+    tokio::task::spawn_blocking(move || -> AppResult<()> {
+        if staging_for_extract.exists() {
+            std::fs::remove_dir_all(&staging_for_extract)?;
+        }
+        std::fs::create_dir_all(&staging_for_extract)?;
+        extract_archive(&archive_for_extract, &staging_for_extract, &asset_name)?;
+
+        if current_for_extract.exists() {
+            std::fs::remove_dir_all(&current_for_extract)?;
+        }
+        std::fs::rename(&staging_for_extract, &current_for_extract)?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| AppError::Invalid(e.to_string()))??;
+
+    let _ = tokio::fs::remove_file(&archive_path).await;
+
+    let _ = app.emit(
+        EVENT_DOWNLOAD_PROGRESS,
+        DownloadProgress {
+            kind,
+            downloaded: asset.size,
+            total: Some(asset.size),
+            done: true,
+        },
+    );
+
+    let _ = version::write(
+        &data_dir,
+        kind,
+        &InstalledMeta {
+            tag: release.tag.clone(),
+            jar_name: asset.name.clone(),
+        },
+    )
+    .await;
+
+    let executable =
+        config::native_current_dir(&data_dir, kind).join(config::native_executable_name());
+    Ok(executable.display().to_string())
+}
+
+async fn download_single_file_release(
+    app: &AppHandle,
+    kind: ServiceKind,
+    release: &ReleaseInfo,
+) -> AppResult<String> {
+    let data_dir = app_data_dir(app)?;
+    let asset = release.package_asset.clone().ok_or_else(|| {
+        let suffix = config::native_single_file_suffix().unwrap_or("<desteklenmeyen-platform>");
+        AppError::Invalid(format!(
+            "Release içinde bu platforma uygun single-file binary bulunamadı ({suffix})"
+        ))
+    })?;
+
+    let binary_path = config::single_file_binary_path(&data_dir, kind);
+    let part_path = binary_path.with_extension("part");
+
+    let app_handle = app.clone();
+    github::download_asset(&asset, &part_path, move |downloaded, total| {
+        let _ = app_handle.emit(
+            EVENT_DOWNLOAD_PROGRESS,
+            DownloadProgress {
+                kind,
+                downloaded,
+                total,
+                done: total.map(|t| downloaded >= t).unwrap_or(false),
+            },
+        );
+    })
+    .await?;
+
+    // Unix: çalıştırılabilir yap.
+    let part_for_chmod = part_path.clone();
+    tokio::task::spawn_blocking(move || -> AppResult<()> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&part_for_chmod, std::fs::Permissions::from_mode(0o755))?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| AppError::Invalid(e.to_string()))??;
+
+    // Eski NativePackage kurulumu (current/ dizini) varsa temizle.
+    let old_current = config::native_current_dir(&data_dir, kind);
+    if old_current.exists() {
+        let _ = tokio::fs::remove_dir_all(&old_current).await;
+    }
+
+    // Eski binary varsa sil.
+    if binary_path.exists() {
+        let _ = tokio::fs::remove_file(&binary_path).await;
+    }
+
+    // .part → son haline taşı.
+    tokio::fs::rename(&part_path, &binary_path).await?;
+
+    let _ = version::write(
+        &data_dir,
+        kind,
+        &InstalledMeta {
+            tag: release.tag.clone(),
+            jar_name: asset.name.clone(),
+        },
+    )
+    .await;
+
+    let _ = app.emit(
+        EVENT_DOWNLOAD_PROGRESS,
+        DownloadProgress {
+            kind,
+            downloaded: asset.size,
+            total: Some(asset.size),
+            done: true,
+        },
+    );
+
+    Ok(binary_path.display().to_string())
+}
+
+fn extract_archive(archive_path: &Path, dest: &Path, asset_name: &str) -> AppResult<()> {
+    if asset_name.ends_with(".zip") {
+        extract_zip(archive_path, dest)
+    } else if asset_name.ends_with(".tar.gz") {
+        extract_tar_gz(archive_path, dest)
+    } else {
+        Err(AppError::Invalid(format!(
+            "Desteklenmeyen servis paketi arşivi: {asset_name}"
+        )))
+    }
+}
+
+fn extract_tar_gz(archive_path: &Path, dest: &Path) -> AppResult<()> {
+    let file = std::fs::File::open(archive_path)?;
+    let decoder = flate2::read::GzDecoder::new(file);
+    let mut archive = tar::Archive::new(decoder);
+    archive
+        .unpack(dest)
+        .map_err(|e| AppError::Invalid(e.to_string()))
+}
+
+fn extract_zip(archive_path: &Path, dest: &Path) -> AppResult<()> {
+    let file = std::fs::File::open(archive_path)?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| AppError::Invalid(e.to_string()))?;
+        let Some(enclosed) = entry.enclosed_name().map(|p| p.to_path_buf()) else {
+            continue;
+        };
+        let out_path = dest.join(enclosed);
+        if entry.is_dir() {
+            std::fs::create_dir_all(&out_path)?;
+            continue;
+        }
+        if let Some(parent) = out_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut out = std::fs::File::create(&out_path)?;
+        std::io::copy(&mut entry, &mut out).map_err(|e| AppError::Io(e.to_string()))?;
+
+        #[cfg(unix)]
+        if let Some(mode) = entry.unix_mode() {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&out_path, std::fs::Permissions::from_mode(mode))?;
+        }
+    }
+    Ok(())
 }
 
 /// Servis dizininde, yeni kurulan jar dışındaki eşleşen eski jar'ları siler.
@@ -230,7 +567,12 @@ fn cleanup_old_jars(dir: &Path, descriptor: &ServiceDescriptor, keep: &str) {
         if name == keep {
             continue;
         }
-        if name.starts_with(descriptor.jar_prefix) && name.ends_with(".jar") {
+        if descriptor
+            .jar_prefix()
+            .map(|prefix| name.starts_with(prefix))
+            .unwrap_or(false)
+            && name.ends_with(".jar")
+        {
             let _ = std::fs::remove_file(&path);
         }
     }
@@ -255,16 +597,6 @@ pub async fn auto_setup(app: AppHandle) {
         }
     }
 
-    // Java yoksa otomatik başlatma denenmez.
-    let jre_dir = config::bundled_jre_dir(&app);
-    let available = tokio::task::spawn_blocking(move || java::detect(jre_dir).available)
-        .await
-        .unwrap_or(false);
-    if !available {
-        tracing::warn!("Java bulunamadı; servisler otomatik başlatılmadı");
-        return;
-    }
-
     for kind in config::ALL_SERVICES.map(|d| d.kind) {
         if let Err(err) = auto_start(&app, kind).await {
             tracing::warn!(
@@ -274,23 +606,60 @@ pub async fn auto_setup(app: AppHandle) {
             );
         }
     }
+
+    // GİB doğrulama paketleri (şema + şematron) servisin kendisi tarafından
+    // otomatik indirilir: XSLT servisi `VALIDATION_ASSETS_GIB_AUTO_SYNC=true`
+    // env'i ile başlatıldığından, asset dizini boşsa ApplicationReady'de
+    // paketleri arka planda indirir. Bu yüzden burada ek bir işlem gerekmez.
 }
 
-/// Servisin yerel jar'ını en güncel release ile senkron tutar.
-/// Zaten güncel ve jar dosyası yerindeyse indirme yapmaz.
+/// Servisin yerel artifact'ını en güncel release ile senkron tutar.
+/// Zaten güncel ve artifact yerindeyse indirme yapmaz.
 /// Dönüş: indirme/güncelleme yapıldıysa `true`.
-async fn ensure_latest(app: &AppHandle, kind: ServiceKind) -> AppResult<bool> {
+async fn ensure_latest(app: &AppHandle, kind: ServiceKind) -> AppResult<EnsureLatestOutcome> {
     let descriptor = descriptor_for(kind);
     let data_dir = app_data_dir(app)?;
     let release = github::latest_release(&descriptor).await?;
 
-    let jar_present =
-        jar::resolve_jar(&config::jars_dir(&data_dir, kind), &descriptor).is_some();
-    if jar_present && version::is_up_to_date(&data_dir, kind, &release.tag) {
+    let artifact_present = resolve_installed_artifact(&data_dir, &descriptor).is_some();
+    if artifact_present && version::is_up_to_date(&data_dir, kind, &release.tag) {
+        return Ok(EnsureLatestOutcome {
+            updated: false,
+            start_after_update: false,
+        });
+    }
+
+    let start_after_update = stop_running_native_for_update(app, &descriptor).await?;
+    if let Err(err) = download_release(app, kind, &release).await {
+        if start_after_update {
+            let _ = launch_service(app, kind).await;
+        }
+        return Err(err);
+    }
+
+    Ok(EnsureLatestOutcome {
+        updated: true,
+        start_after_update,
+    })
+}
+
+async fn stop_running_native_for_update(
+    app: &AppHandle,
+    descriptor: &ServiceDescriptor,
+) -> AppResult<bool> {
+    if !matches!(
+        descriptor.runtime,
+        ServiceRuntime::NativePackage { .. } | ServiceRuntime::NativeSingleFile { .. }
+    ) {
         return Ok(false);
     }
 
-    download_release(app, kind, &release).await?;
+    let state = app.state::<AppState>();
+    let mut manager = state.manager.lock().await;
+    if !manager.is_running(descriptor.kind) {
+        return Ok(false);
+    }
+    manager.stop(descriptor.kind)?;
     Ok(true)
 }
 
@@ -311,8 +680,10 @@ pub async fn background_updater(app: AppHandle) {
         ticker.tick().await;
         for kind in config::ALL_SERVICES.map(|d| d.kind) {
             match ensure_latest(&app, kind).await {
-                Ok(true) => on_service_updated(&app, kind).await,
-                Ok(false) => {}
+                Ok(outcome) if outcome.updated => {
+                    on_service_updated(&app, kind, outcome.start_after_update).await
+                }
+                Ok(_) => {}
                 Err(err) => tracing::warn!(
                     service = kind.as_str(),
                     error = %err,
@@ -323,33 +694,51 @@ pub async fn background_updater(app: AppHandle) {
     }
 }
 
-/// Bir servisin jar'ı güncellendiğinde çağrılır: çalışıyorsa yeni sürümle
+/// Bir servisin artifact'ı güncellendiğinde çağrılır: çalışıyorsa yeni sürümle
 /// yeniden başlatır ve frontend'e `service-updated` event'i yayınlar.
-async fn on_service_updated(app: &AppHandle, kind: ServiceKind) {
+async fn on_service_updated(app: &AppHandle, kind: ServiceKind, start_after_update: bool) {
     let tag = app_data_dir(app)
         .ok()
         .and_then(|dir| version::read(&dir, kind))
         .map(|meta| meta.tag);
 
-    let restarted = restart_if_running(app, kind).await.unwrap_or_else(|err| {
-        tracing::warn!(
-            service = kind.as_str(),
-            error = %err,
-            "güncellenen servis yeniden başlatılamadı"
-        );
-        false
-    });
+    let restarted = restart_after_update(app, kind, start_after_update)
+        .await
+        .unwrap_or_else(|err| {
+            tracing::warn!(
+                service = kind.as_str(),
+                error = %err,
+                "güncellenen servis yeniden başlatılamadı"
+            );
+            false
+        });
 
     tracing::info!(
         service = kind.as_str(),
         tag = tag.as_deref().unwrap_or("?"),
         restarted,
-        "servis jar'ı güncellendi"
+        "servis artifact'ı güncellendi"
     );
     let _ = app.emit(
         EVENT_SERVICE_UPDATED,
-        ServiceUpdatedEvent { kind, tag, restarted },
+        ServiceUpdatedEvent {
+            kind,
+            tag,
+            restarted,
+        },
     );
+}
+
+async fn restart_after_update(
+    app: &AppHandle,
+    kind: ServiceKind,
+    start_after_update: bool,
+) -> AppResult<bool> {
+    if start_after_update {
+        launch_service(app, kind).await?;
+        return Ok(true);
+    }
+    restart_if_running(app, kind).await
 }
 
 /// Servis bu uygulama tarafından çalışıyorsa durdurup yeni jar ile ilk boş
@@ -367,6 +756,39 @@ async fn restart_if_running(app: &AppHandle, kind: ServiceKind) -> AppResult<boo
 
     launch_service(app, kind).await?;
     Ok(true)
+}
+
+/// Bir servisin başlatma sürecine ait log çıktısını döner.
+/// Süreç stdout/stderr çıktısını `launch.log` dosyasına yazar; bu komut
+/// dosyanın son `lines` satırını okur. Servis hiç başlatılmamışsa boş döner.
+#[tauri::command]
+pub async fn read_service_launch_logs(
+    app: AppHandle,
+    kind: ServiceKind,
+    lines: Option<usize>,
+) -> AppResult<String> {
+    let data_dir = app_data_dir(&app)?;
+    let log_path = config::launch_log_path(&data_dir, kind);
+
+    if !log_path.exists() {
+        return Ok(String::new());
+    }
+
+    let max_lines = lines.unwrap_or(500);
+    let content = tokio::task::spawn_blocking(move || -> String {
+        let bytes = match std::fs::read(&log_path) {
+            Ok(b) => b,
+            Err(_) => return String::new(),
+        };
+        let text = String::from_utf8_lossy(&bytes);
+        let all: Vec<&str> = text.lines().collect();
+        let skip = all.len().saturating_sub(max_lines);
+        all[skip..].join("\n")
+    })
+    .await
+    .unwrap_or_default();
+
+    Ok(content)
 }
 
 /// Servisi otomatik başlatır. Dışarıdan (varsayılan portta) ya da bu uygulama

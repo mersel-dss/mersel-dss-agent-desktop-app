@@ -65,7 +65,7 @@ jobs:
       - name: Bağımlılıkları kur
         run: pnpm install --frozen-lockfile
 
-      - name: Platforma özel JRE 1.8'i göm
+      - name: Platforma özel JRE'leri göm (Java 8 + Java 21)
         run: pnpm fetch-jre
 
       - name: Build + imzalı updater artefaktları + Release

@@ -4,7 +4,8 @@ use crate::config;
 use crate::download::github;
 use crate::error::AppResult;
 use crate::java;
-use crate::models::{ChangelogEntry, JavaInfo};
+use crate::models::{ChangelogEntry, JavaInfo, JavaRuntimeInfo};
+use std::collections::BTreeMap;
 use tauri::AppHandle;
 
 /// Makinedeki Java runtime'ı tespit eder. Önce uygulamayla paketlenmiş JRE'yi,
@@ -22,6 +23,62 @@ pub async fn detect_java(app: AppHandle) -> JavaInfo {
             source: None,
             bundled: false,
         })
+}
+
+/// Servislerin gerektirdiği **her bir Java sürümü için ayrı** runtime durumunu
+/// döner (örn. imza/doğrulama → Java 8, önizleme → Java 21). Her yuva için
+/// servise uygun paketli JRE önceliklenir; eşiği karşılayan ilk runtime
+/// (paketli → `JAVA_HOME` → `PATH`) raporlanır. Dashboard bu listeyi ayrı ayrı
+/// gösterir.
+#[tauri::command]
+pub async fn detect_java_runtimes(app: AppHandle) -> Vec<JavaRuntimeInfo> {
+    // Gerekli major sürümleri, o sürümü kullanan servislerle grupla (artan sırada).
+    let mut groups: BTreeMap<u32, Vec<&'static str>> = BTreeMap::new();
+    for descriptor in config::ALL_SERVICES {
+        if let Some(major) = descriptor.min_java_major() {
+            groups
+                .entry(major)
+                .or_default()
+                .push(descriptor.display_name);
+        }
+    }
+
+    let mut runtimes = Vec::with_capacity(groups.len());
+    for (major, services) in groups {
+        let preferred = config::bundled_jre_dir_for(&app, major);
+        let detected = tokio::task::spawn_blocking(move || {
+            java::detect_satisfying(preferred.as_deref(), major)
+        })
+        .await
+        .ok()
+        .flatten();
+
+        let purpose = services.join(" · ");
+        let label = format!("Java {major}");
+        runtimes.push(match detected {
+            Some(d) => JavaRuntimeInfo {
+                required_major: major,
+                label,
+                purpose,
+                available: true,
+                version: d.version,
+                major: Some(d.major),
+                source: Some(d.source.as_str().to_string()),
+                bundled: d.bundled,
+            },
+            None => JavaRuntimeInfo {
+                required_major: major,
+                label,
+                purpose,
+                available: false,
+                version: None,
+                major: None,
+                source: None,
+                bundled: false,
+            },
+        });
+    }
+    runtimes
 }
 
 /// Uygulamanın GitHub deposundaki sürüm notlarını (changelog) en yeniden

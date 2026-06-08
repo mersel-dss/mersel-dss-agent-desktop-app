@@ -61,6 +61,23 @@ pub fn looks_like_envelope(bytes: &[u8]) -> bool {
     }
 }
 
+/// Bir XML belgesinin kök elemanının yerel adını döner (örn. `Invoice`).
+/// XML olmayan içerikte (örn. PDF) `None` döner.
+pub fn read_root_local_name(bytes: &[u8]) -> Option<String> {
+    let mut reader = Reader::from_reader(bytes);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                return Some(String::from_utf8_lossy(&local_name_bytes(e.name())).into_owned());
+            }
+            Ok(Event::Eof) | Err(_) => return None,
+            _ => {}
+        }
+    }
+}
+
 /// Bir UBL belgesinin **kök elemanın doğrudan çocuğu** olan `cbc:ID` (belge
 /// numarası) ve `cbc:UUID` (ETTN) değerlerini okur. Yalnızca kök seviyesindeki
 /// değerler alınır; satır/taraf gibi iç içe `ID` öğeleri (örn. `cac:…/cbc:ID`)

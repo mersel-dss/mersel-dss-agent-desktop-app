@@ -11,6 +11,10 @@ pub enum ServiceKind {
     Agent,
     /// İmza/zaman damgası doğrulama servisi (port 8086).
     Verifier,
+    /// e-Belge XML'lerini görüntülenebilir HTML'e dönüştüren XSLT servisi (port 8080).
+    Xslt,
+    /// HTML önizlemelerini Chromium/Playwright ile PDF'e dönüştüren servis.
+    HtmlToPdf,
 }
 
 impl ServiceKind {
@@ -18,6 +22,8 @@ impl ServiceKind {
         match self {
             ServiceKind::Agent => "agent",
             ServiceKind::Verifier => "verifier",
+            ServiceKind::Xslt => "xslt",
+            ServiceKind::HtmlToPdf => "html-to-pdf",
         }
     }
 }
@@ -76,6 +82,30 @@ pub struct JavaInfo {
     pub bundled: bool,
 }
 
+/// Belirli bir minimum Java sürümü gerektiren servisler için çözülen runtime
+/// durumu. Dashboard'da her gerekli sürüm (örn. Java 8 ve Java 21) ayrı ayrı
+/// gösterilir. `available` true ise bu sürümü karşılayan bir runtime bulundu.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JavaRuntimeInfo {
+    /// Bu yuvanın gerektirdiği minimum Java major sürümü (örn. 8, 21).
+    pub required_major: u32,
+    /// Kısa etiket (örn. "Java 21").
+    pub label: String,
+    /// Bu runtime'ı kullanan servis(ler) (örn. "İmzalama Servisi · Doğrulama Servisi").
+    pub purpose: String,
+    /// Gereksinimi karşılayan bir runtime bulundu mu?
+    pub available: bool,
+    /// Çözülen runtime'ın tam sürümü (varsa).
+    pub version: Option<String>,
+    /// Çözülen runtime'ın major sürümü (varsa).
+    pub major: Option<u32>,
+    /// Kaynak: `bundled` | `java-home` | `path`.
+    pub source: Option<String>,
+    /// Uygulamayla paketlenmiş gömülü JRE mi kullanılıyor?
+    pub bundled: bool,
+}
+
 /// GitHub release varlığı (asset).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,6 +123,7 @@ pub struct ReleaseInfo {
     pub name: Option<String>,
     pub published_at: Option<String>,
     pub jar_asset: Option<ReleaseAsset>,
+    pub package_asset: Option<ReleaseAsset>,
 }
 
 /// Bir GitHub release'inin sürüm notu (changelog) girdisi. Gövde (`body`)

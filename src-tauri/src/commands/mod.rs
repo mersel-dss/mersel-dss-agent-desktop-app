@@ -1,9 +1,12 @@
 //! Frontend'e açılan Tauri komutları.
 
 pub mod diagnostics;
+pub mod export;
+pub mod preview;
 pub mod services;
 pub mod signing;
 pub mod system;
+pub mod validation;
 pub mod verification;
 pub mod virtualcards;
 

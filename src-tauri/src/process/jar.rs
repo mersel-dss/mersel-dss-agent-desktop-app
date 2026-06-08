@@ -5,11 +5,12 @@ use std::path::{Path, PathBuf};
 
 /// Verilen dizinde `<jar_prefix>*.jar` desenine uyan en yeni jar'ı döner.
 pub fn resolve_jar(dir: &Path, descriptor: &ServiceDescriptor) -> Option<PathBuf> {
+    let prefix = descriptor.jar_prefix()?;
     let entries = std::fs::read_dir(dir).ok()?;
     let mut candidates: Vec<(std::time::SystemTime, PathBuf)> = entries
         .filter_map(|e| e.ok())
         .map(|e| e.path())
-        .filter(|p| is_matching_jar(p, descriptor.jar_prefix))
+        .filter(|p| is_matching_jar(p, prefix))
         .filter_map(|p| {
             let modified = p.metadata().ok()?.modified().ok()?;
             Some((modified, p))

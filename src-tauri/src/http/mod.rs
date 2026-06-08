@@ -2,7 +2,9 @@
 
 pub mod agent;
 pub mod diagnostics;
+pub mod htmltopdf;
 pub mod verifier;
+pub mod xslt;
 
 use crate::error::{AppError, AppResult};
 use std::path::Path;
@@ -34,9 +36,7 @@ pub async fn is_reachable(port: u16) -> bool {
 }
 
 /// Bir dosyayı multipart `Part` olarak yükler (octet-stream).
-pub(crate) async fn file_part(
-    path: &Path,
-) -> AppResult<reqwest::multipart::Part> {
+pub(crate) async fn file_part(path: &Path) -> AppResult<reqwest::multipart::Part> {
     let bytes = tokio::fs::read(path).await?;
     let file_name = path
         .file_name()

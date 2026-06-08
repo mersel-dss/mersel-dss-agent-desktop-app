@@ -2,11 +2,12 @@
  * Tek bir Java servisini yöneten kart: kur / başlat / durdur / arayüzü aç.
  */
 
+import { useEffect, useRef } from "react";
 import {
   Download,
   ExternalLink,
+  FileText,
   Play,
-  RefreshCw,
   ShieldCheck,
   Square,
   Stamp,
@@ -20,6 +21,7 @@ import {
   useLatestRelease,
   useStartService,
   useStopService,
+  useUpdateService,
 } from "@/application/services/hooks";
 import type { ProgressMap } from "@/application/services/useDownloadProgress";
 import { SERVICE_META } from "@/shared/config/services";
@@ -45,6 +47,8 @@ interface ServiceControlCardProps {
 const SERVICE_ICON: Record<string, LucideIcon> = {
   agent: Stamp,
   verifier: ShieldCheck,
+  xslt: FileText,
+  "html-to-pdf": FileText,
 };
 
 export function ServiceControlCard({ service, progress }: ServiceControlCardProps) {
@@ -52,16 +56,42 @@ export function ServiceControlCard({ service, progress }: ServiceControlCardProp
   const start = useStartService();
   const stop = useStopService();
   const install = useInstallService();
+  const update = useUpdateService();
   const release = useLatestRelease(service.kind);
 
   const dl = progress[service.kind];
-  const installing = install.isPending || (dl && !dl.done);
+  const installing = install.isPending || update.isPending || (dl && !dl.done);
   const percent =
     dl && dl.total ? Math.round((dl.downloaded / dl.total) * 100) : undefined;
 
   const isInstalled = service.state !== "not-installed";
   const isRunning = service.state === "running" || service.state === "starting";
   const isExternal = service.externallyManaged === true;
+
+  const latestTag = release.data?.tag;
+  const updateAvailable =
+    !isExternal &&
+    isInstalled &&
+    !!latestTag &&
+    !!service.installedTag &&
+    latestTag !== service.installedTag;
+
+  // Yeni bir sürüm tespit edilince güncellemeyi otomatik uygula (indir +
+  // çalışıyorsa yeniden başlat). Aynı tag için tek deneme yapılır ki ağ hatası
+  // durumunda döngüye girmesin; arka plan güncelleyici sonradan yeniden dener.
+  const attemptedTagRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!updateAvailable || !latestTag) return;
+    if (installing || update.isPending) return;
+    if (attemptedTagRef.current === latestTag) return;
+    attemptedTagRef.current = latestTag;
+    update.mutate(service.kind, {
+      onSuccess: (updated) => {
+        if (updated) toast.success(`${meta.shortName} güncellendi (${latestTag})`);
+      },
+      onError: (e) => toast.error(`Güncelleme başarısız: ${errorMessage(e)}`),
+    });
+  }, [updateAvailable, latestTag, installing, update, service.kind, meta.shortName]);
 
   const handleInstall = () => {
     install.mutate(service.kind, {
@@ -84,6 +114,7 @@ export function ServiceControlCard({ service, progress }: ServiceControlCardProp
   };
 
   const Icon = SERVICE_ICON[service.kind] ?? Stamp;
+  const docsUrl = service.baseUrl + (meta.docsPath ?? "");
 
   return (
     <Card className="lift flex flex-col">
@@ -107,7 +138,7 @@ export function ServiceControlCard({ service, progress }: ServiceControlCardProp
             <dd className="tnum font-medium">{service.port}</dd>
           </div>
           <div className="flex justify-between gap-4 py-2">
-            <dt className="text-fg-muted">Jar</dt>
+            <dt className="text-fg-muted">{meta.packageLabel ?? "Jar"}</dt>
             <dd className="truncate font-medium" title={service.jarPath ?? ""}>
               {service.jarPath ? basename(service.jarPath) : "—"}
             </dd>
@@ -119,12 +150,10 @@ export function ServiceControlCard({ service, progress }: ServiceControlCardProp
           <div className="flex justify-between py-2">
             <dt className="text-fg-muted">Son sürüm</dt>
             <dd className="flex items-center gap-1.5 font-medium">
-              {release.data?.tag ?? "…"}
-              {release.data?.tag &&
-              service.installedTag &&
-              release.data.tag !== service.installedTag ? (
+              {latestTag ?? "…"}
+              {updateAvailable ? (
                 <span className="rounded-sm bg-status-starting/15 px-1.5 py-px text-[10px] font-medium text-[rgb(var(--tone-warning-fg))]">
-                  güncelleme var
+                  {installing ? "güncelleniyor…" : "güncelleme var"}
                 </span>
               ) : null}
             </dd>
@@ -151,10 +180,10 @@ export function ServiceControlCard({ service, progress }: ServiceControlCardProp
             </div>
             <Button
               variant="outline"
-              onClick={() => void openUrl(service.baseUrl)}
+              onClick={() => void openUrl(docsUrl)}
             >
               <ExternalLink className="h-4 w-4" />
-              Arayüz
+              Api Dökümantasyonu
             </Button>
           </>
         ) : !isInstalled ? (
@@ -175,29 +204,22 @@ export function ServiceControlCard({ service, progress }: ServiceControlCardProp
             </Button>
             <Button
               variant="outline"
-              onClick={() => void openUrl(service.baseUrl)}
+              onClick={() => void openUrl(docsUrl)}
               disabled={service.state !== "running"}
             >
               <ExternalLink className="h-4 w-4" />
-              Arayüz
+              Api Dökümantasyonu
             </Button>
           </>
         ) : (
-          <>
-            <Button onClick={handleStart} disabled={start.isPending} className="flex-1">
-              <Play className="h-4 w-4" />
-              Başlat
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleInstall}
-              disabled={!!installing}
-              aria-label="Güncelle"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </>
+          <Button
+            onClick={handleStart}
+            disabled={start.isPending || !!installing}
+            className="flex-1"
+          >
+            <Play className="h-4 w-4" />
+            {installing ? "Güncelleniyor…" : "Başlat"}
+          </Button>
         )}
       </CardFooter>
     </Card>

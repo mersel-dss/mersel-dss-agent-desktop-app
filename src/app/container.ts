@@ -11,6 +11,8 @@ import type { DiagnosticsGateway } from "@/domain/diagnostics/ports";
 import type { FileGateway } from "@/domain/platform/ports";
 import type { UpdaterGateway } from "@/domain/update/ports";
 import type { ChangelogGateway } from "@/domain/changelog/ports";
+import type { PreviewGateway } from "@/domain/preview/ports";
+import type { ValidationGateway } from "@/domain/validation/ports";
 
 import { TauriServiceGateway } from "@/infrastructure/tauri/serviceGateway";
 import { TauriSigningGateway } from "@/infrastructure/tauri/signingGateway";
@@ -20,6 +22,8 @@ import { TauriDiagnosticsGateway } from "@/infrastructure/tauri/diagnosticsGatew
 import { TauriFileGateway } from "@/infrastructure/tauri/fileGateway";
 import { TauriUpdaterGateway } from "@/infrastructure/tauri/updaterGateway";
 import { TauriChangelogGateway } from "@/infrastructure/tauri/changelogGateway";
+import { TauriPreviewGateway } from "@/infrastructure/tauri/previewGateway";
+import { TauriValidationGateway } from "@/infrastructure/tauri/validationGateway";
 
 export interface Container {
   services: ServiceGateway;
@@ -30,6 +34,8 @@ export interface Container {
   files: FileGateway;
   updater: UpdaterGateway;
   changelog: ChangelogGateway;
+  preview: PreviewGateway;
+  validation: ValidationGateway;
 }
 
 export const container: Container = {
@@ -41,4 +47,6 @@ export const container: Container = {
   files: new TauriFileGateway(),
   updater: new TauriUpdaterGateway(),
   changelog: new TauriChangelogGateway(),
+  preview: new TauriPreviewGateway(),
+  validation: new TauriValidationGateway(),
 };

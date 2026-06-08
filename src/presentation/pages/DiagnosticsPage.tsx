@@ -1,12 +1,11 @@
 /**
- * Tanılama sayfası: trace kayıtları, PIN'siz imza probu ve destek paketi.
- * Tüm veriler agent diagnostics API'sinden native gelir; pencere açmaya gerek yoktur.
+ * Tanılama sayfası: trace kayıtları, PIN'siz imza probu, destek paketi
+ * ve servis başlatma logları.
  */
 
 import { useService } from "@/application/services/hooks";
 import { ScrollPage } from "@/presentation/components/common/ScrollPage";
 import { PageHeader } from "@/presentation/components/common/PageHeader";
-import { ServiceOfflineNotice } from "@/presentation/components/common/ServiceOfflineNotice";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import {
   Tabs,
@@ -17,46 +16,54 @@ import {
 import { TracesPanel } from "@/presentation/features/diagnostics/TracesPanel";
 import { SignProbePanel } from "@/presentation/features/diagnostics/SignProbePanel";
 import { SupportBundleButton } from "@/presentation/features/diagnostics/SupportBundleButton";
+import { ServiceLogsPanel } from "@/presentation/features/diagnostics/ServiceLogsPanel";
 
 export function DiagnosticsPage() {
   const { isRunning } = useService("agent");
-
-  if (!isRunning) {
-    return (
-      <ScrollPage className="space-y-5">
-        <PageHeader
-          title="Tanılama"
-          description="İmza ajanının izleri, kart prob sonuçları ve destek paketi."
-        />
-        <ServiceOfflineNotice
-          title="İmza ajanı çalışmıyor"
-          description="Tanılama verisi için önce Genel Bakış'tan imza ajanını başlatın."
-        />
-      </ScrollPage>
-    );
-  }
 
   return (
     <ScrollPage className="space-y-5">
       <PageHeader
         title="Tanılama"
-        description="İmza ajanının izleri, kart prob sonuçları ve destek paketi."
+        description="Servis logları, imza ajanı izleri, kart prob sonuçları ve destek paketi."
       />
       <Card>
         <CardContent className="pt-6">
-          <Tabs defaultValue="traces">
+          <Tabs defaultValue="service-logs">
             <div className="mb-6 flex items-center justify-between gap-3">
               <TabsList>
-                <TabsTrigger value="traces">İzler</TabsTrigger>
-                <TabsTrigger value="probe">İmza Probu</TabsTrigger>
+                <TabsTrigger value="service-logs">Servis Logları</TabsTrigger>
+                <TabsTrigger value="traces" disabled={!isRunning}>
+                  İzler
+                </TabsTrigger>
+                <TabsTrigger value="probe" disabled={!isRunning}>
+                  İmza Probu
+                </TabsTrigger>
               </TabsList>
-              <SupportBundleButton />
+              {isRunning ? <SupportBundleButton /> : null}
             </div>
+            <TabsContent value="service-logs">
+              <ServiceLogsPanel />
+            </TabsContent>
             <TabsContent value="traces">
-              <TracesPanel />
+              {isRunning ? (
+                <TracesPanel />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  İmza ajanı çalışmıyor; izler için önce Genel Bakış'tan imza
+                  ajanını başlatın.
+                </p>
+              )}
             </TabsContent>
             <TabsContent value="probe">
-              <SignProbePanel />
+              {isRunning ? (
+                <SignProbePanel />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  İmza ajanı çalışmıyor; imza probu için önce Genel Bakış'tan
+                  imza ajanını başlatın.
+                </p>
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>

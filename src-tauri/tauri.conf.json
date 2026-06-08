@@ -42,7 +42,8 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "resources/jre": "jre"
+      "resources/jre": "jre",
+      "resources/jre21": "jre21"
     },
     "linux": {
       "deb": {
