@@ -7,6 +7,8 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-06-09
+
 ### Eklendi
 
 - **Profesyonel uygulama güncelleme bildirimi.** Yeni bir sürüm çıktığında üst
@@ -99,6 +101,7 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
   Zaman Damgası) solda, ikincil gezinme (Sanal Kartlar · Tanılama · Ayarlar)
   sağa yaslı.
 
-[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-desktop-app/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-desktop-app/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/mersel-dss/mersel-dss-agent-desktop-app/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/mersel-dss/mersel-dss-agent-desktop-app/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/mersel-dss/mersel-dss-agent-desktop-app/compare/v0.1.0...v0.1.8
