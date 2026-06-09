@@ -264,6 +264,26 @@ pub async fn stop_service(state: State<'_, AppState>, kind: ServiceKind) -> AppR
     manager.stop(kind)
 }
 
+/// Tüm yönetilen servisleri durdurur ve process handle'larının (özellikle
+/// Windows'ta `jre\bin\java.dll`) serbest kalmasını bekler.
+///
+/// KRİTİK (Windows güncelleme): NSIS kurulumu, çalışan Java alt süreçleri
+/// `java.dll`'i kilitli tuttuğu için "Error opening file for writing" verip
+/// dosyanın üzerine yazamıyordu. Frontend, güncellemeyi İNDİRMEDEN ÖNCE bunu
+/// çağırır; böylece installer çalıştığında tüm JRE dosyaları serbesttir.
+#[tauri::command]
+pub async fn stop_all_services(state: State<'_, AppState>) -> AppResult<()> {
+    {
+        let mut manager = state.manager.lock().await;
+        manager.stop_all();
+    }
+    // `stop()` kill+wait yapıp süreci reap etse de, Windows dosya kilidini
+    // serbest bırakması bir an gecikebilir. Installer'ın java.dll'e yazabilmesi
+    // için kısa bir tampon bırakıyoruz.
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    Ok(())
+}
+
 /// İlgili servisin GitHub'daki en güncel release bilgisini döner.
 #[tauri::command]
 pub async fn latest_release(kind: ServiceKind) -> AppResult<ReleaseInfo> {

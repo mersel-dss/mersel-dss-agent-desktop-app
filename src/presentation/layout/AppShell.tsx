@@ -9,6 +9,7 @@ import { useServiceUpdates } from "@/application/services/useServiceUpdates";
 import { BootSplash } from "./BootSplash";
 import { StatusBar } from "./StatusBar";
 import { TopBar } from "./TopBar";
+import { UpdateBanner } from "./UpdateBanner";
 
 export function AppShell() {
   // Arka plan jar güncellemelerini dinle (toast + sorgu tazeleme).
@@ -22,6 +23,9 @@ export function AppShell() {
       </main>
       <StatusBar />
       <BootSplash />
+
+      {/* Uygulama güncellemesi — sağ-alt köşede profesyonel bildirim + ilerleme */}
+      <UpdateBanner />
     </div>
   );
 }

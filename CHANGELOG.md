@@ -7,6 +7,21 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ## [Unreleased]
 
+### Eklendi
+
+- **Profesyonel uygulama güncelleme bildirimi.** Yeni bir sürüm çıktığında üst
+  menüdeki küçük buton yerine, sağ-altta beliren şık bir kart gösterilir: sürüm
+  bilgisi, **Güncelle** / **Daha sonra** aksiyonları ve indirme sırasında **canlı
+  ilerleme çubuğu** (yüzde + indirilen/toplam boyut). Hata olursa neden + **Tekrar
+  dene** sunulur. Böylece kullanıcı güncellemenin ne durumda olduğunu net görür.
+
+### Düzeltildi
+
+- **Windows güncelleme "Error opening file for writing: …\\jre\\bin\\java.dll"
+  hatası giderildi.** Güncelleme indirilmeden önce tüm Java servisleri durdurulup
+  process kilitlerinin (özellikle `java.dll`) serbest kalması beklenir; aksi hâlde
+  çalışan süreçler dosyayı kilitli tutuyor ve NSIS kurulumu üzerine yazamıyordu.
+
 ## [0.1.9] - 2026-06-09
 
 ### Değiştirildi

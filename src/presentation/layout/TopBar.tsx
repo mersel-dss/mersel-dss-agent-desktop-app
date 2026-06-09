@@ -9,17 +9,12 @@ import {
   Activity,
   Clock,
   CreditCard,
-  DownloadCloud,
   FileSignature,
   LayoutDashboard,
-  Loader2,
   Settings2,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
-import { toast } from "sonner";
-import { errorMessage } from "@/shared/lib/errors";
-import { useAppUpdate } from "@/application/update/hooks";
 import { MerselWordmark } from "@/presentation/components/brand/MerselLogo";
 import { WindowControls } from "@/presentation/layout/WindowControls";
 import { IS_WINDOWS } from "@/shared/lib/platform";
@@ -85,39 +80,6 @@ function NavLinks({ items }: { items: NavItem[] }) {
   );
 }
 
-/** Yalnızca yeni bir uygulama sürümü mevcutsa görünen güncelle butonu. */
-function UpdateButton() {
-  const { info, install } = useAppUpdate();
-  if (!info?.available) return null;
-
-  const handleUpdate = () => {
-    toast.info("Güncelleme indiriliyor…");
-    install.mutate(undefined, {
-      onError: (e) =>
-        toast.error(`Güncelleme başarısız: ${errorMessage(e)}`),
-    });
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleUpdate}
-      disabled={install.isPending}
-      title={`Sürüm ${info.version} hazır — güncellemek için tıkla`}
-      className="flex items-center gap-1.5 rounded-md border border-status-running/30 bg-status-running/10 px-2 py-1 text-[11.5px] font-medium text-status-running transition-colors hover:bg-status-running/15 disabled:opacity-70"
-    >
-      {install.isPending ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : (
-        <DownloadCloud className="h-3.5 w-3.5" />
-      )}
-      <span className="hidden whitespace-nowrap sm:inline">
-        {install.isPending ? "Güncelleniyor…" : `Güncelle ${info.version}`}
-      </span>
-    </button>
-  );
-}
-
 export function TopBar() {
   return (
     <header
@@ -148,13 +110,12 @@ export function TopBar() {
         <NavLinks items={SECONDARY_NAV_ITEMS} />
       </nav>
 
-      {/* Sağ: yalnızca güncelleme mevcutsa görünür */}
-      <div className="flex shrink-0 items-center px-1">
-        <UpdateButton />
-      </div>
-
       {/* Windows: çerçevesiz pencere için özel min/maks/kapat kontrolleri. */}
-      {IS_WINDOWS ? <WindowControls /> : null}
+      {IS_WINDOWS ? (
+        <div className="ml-1 flex items-stretch">
+          <WindowControls />
+        </div>
+      ) : null}
     </header>
   );
 }

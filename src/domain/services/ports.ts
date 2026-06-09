@@ -22,6 +22,13 @@ export interface ServiceGateway {
   startService(kind: ServiceKind): Promise<number>;
   /** Servisi durdurur. */
   stopService(kind: ServiceKind): Promise<void>;
+  /**
+   * Tüm yönetilen servisleri durdurur ve process handle'larının serbest
+   * kalmasını bekler. Uygulama güncellemesinden ÖNCE çağrılır; aksi hâlde
+   * çalışan Java süreçleri `jre/bin/java.dll`'i kilitleyip Windows kurulumunu
+   * "Error opening file for writing" ile bozar.
+   */
+  stopAllServices(): Promise<void>;
   /** GitHub'daki en güncel release bilgisini döner. */
   latestRelease(kind: ServiceKind): Promise<ReleaseInfo>;
   /** En güncel jar'ı indirip kurar; kurulan jar yolunu döner. */

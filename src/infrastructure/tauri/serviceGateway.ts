@@ -33,6 +33,10 @@ export class TauriServiceGateway implements ServiceGateway {
     return call<void>("stop_service", { kind });
   }
 
+  stopAllServices(): Promise<void> {
+    return call<void>("stop_all_services");
+  }
+
   latestRelease(kind: ServiceKind): Promise<ReleaseInfo> {
     return call<ReleaseInfo>("latest_release", { kind });
   }

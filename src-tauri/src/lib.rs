@@ -65,6 +65,7 @@ pub fn run() {
             commands::services::list_services,
             commands::services::start_service,
             commands::services::stop_service,
+            commands::services::stop_all_services,
             commands::services::latest_release,
             commands::services::install_service,
             commands::services::update_service,
