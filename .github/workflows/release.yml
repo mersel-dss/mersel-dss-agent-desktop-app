@@ -22,10 +22,11 @@ jobs:
           # Java 21 için Adoptium aarch64 kullanılır.
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
-          # macOS (Intel)
-          - platform: macos-13
-            args: "--target x86_64-apple-darwin"
-          # Linux (Ubuntu) — .deb + .AppImage
+          # NOT: macOS Intel (macos-13) bilinçli olarak kaldırıldı. GitHub'ın
+          # Intel macOS runner'ları kıt/emekliye ayrılıyor; job saatlerce boş
+          # runner bekleyip release'i bloke ediyordu. Yalnızca Apple Silicon
+          # (arm64) macOS üretilir.
+          # Linux (Ubuntu) — .deb
           - platform: ubuntu-22.04
             args: ""
           # Windows — NSIS
@@ -58,7 +59,7 @@ jobs:
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || matrix.platform == 'macos-13' && 'x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
       - uses: Swatinem/rust-cache@v2
         with:
