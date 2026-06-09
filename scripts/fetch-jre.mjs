@@ -278,7 +278,15 @@ async function fetchOne({ version, dir }, apiOs, apiArch) {
     // Hedefi temizle (yalnızca .gitkeep kalsın), sonra JRE home içeriğini kopyala.
     await rm(dest, { recursive: true, force: true });
     await mkdir(dest, { recursive: true });
-    await cp(home, dest, { recursive: true });
+    // `dereference: true` ZORUNLU: Linux Temurin JRE'sinde modül-başına legal
+    // dosyaları (ASSEMBLY_EXCEPTION, LICENSE...) `legal/java.base/`e işaret eden
+    // göreli sembolik bağlardır. Node `fs.cp` varsayılanı (verbatim kapalı) bu
+    // bağları, birazdan silinecek GEÇİCİ çıkarma dizinine ait MUTLAK yola yeniden
+    // yazar; `work` temizlenince bağlar kırılır ve Tauri build script'inin kaynak
+    // varlık (exists) kontrolü "resource path ... doesn't exist" ile patlar.
+    // Sembolik bağları gerçek dosyalara çözerek tamamen kendi içinde tutarlı,
+    // bağsız bir ağaç üretiriz (paketleyiciler için de en güvenli biçim).
+    await cp(home, dest, { recursive: true, dereference: true });
 
     normalizePermissions(dest);
 
