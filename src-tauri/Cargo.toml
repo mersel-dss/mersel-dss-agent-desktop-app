@@ -1,6 +1,6 @@
 [package]
 name = "mersel-dss-agent-desktop"
-version = "0.1.8"
+version = "0.1.9"
 description = "Mersel İmzamatik - Mersel tarafından geliştirilen yerel e-imza ve doğrulama masaüstü uygulaması"
 authors = ["Mersel"]
 edition = "2021"
