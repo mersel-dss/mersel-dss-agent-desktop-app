@@ -78,6 +78,18 @@ impl ServiceManager {
             command.arg(arg);
         }
 
+        // KRİTİK: Java sürecinin çalışma dizinini jar'ın (yazılabilir) klasörüne
+        // sabitle. Aksi hâlde paketli uygulama Finder/Dock'tan açıldığında alt
+        // süreç CWD'sini `/` (kök) olarak miras alır; Spring Boot'un logback
+        // yapılandırması göreli `./logs/...` yoluna yazmaya çalışıp
+        // "FileNotFoundException: /./logs/application.log" ile başlatmayı tümden
+        // reddeder. jar `<data_dir>/services/<kind>/` altında olduğundan bu dizin
+        // her zaman yazılabilirdir ve loglar servis başına ayrışır.
+        if let Some(dir) = jar_path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+            command.current_dir(dir);
+        }
+
         if let Some(log) = launch_log_path {
             if let Ok(file) = Self::prepare_launch_log(log) {
                 let stderr_file = file.try_clone().unwrap_or_else(|_| {
