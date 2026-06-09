@@ -92,8 +92,11 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Mersel DSS Agent ${{ github.ref_name }}"
-          releaseDraft: true
+          releaseName: "İmzamatik ${{ github.ref_name }}"
+          # Taslak DEĞİL: release otomatik yayınlansın. Updater ucu
+          # (releases/latest/download/latest.json) yalnız YAYINLANMIŞ,
+          # prerelease olmayan release'i gördüğünden bu zorunlu.
+          releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}

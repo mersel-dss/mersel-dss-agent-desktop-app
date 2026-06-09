@@ -9,6 +9,13 @@ use tokio::io::AsyncWriteExt;
 
 const USER_AGENT: &str = "mersel-dss-agent-desktop";
 
+/// İstemcinin servis sürümlerini okuduğu statik manifest (GitHub Pages CDN).
+/// Sunucu tarafında token'lı bir Action saatte bir tazeler. Bunu kullanmak,
+/// kimliksiz `api.github.com` 60 istek/saat limitine (kurumsal NAT'ta ölümcül)
+/// HİÇ dokunmadan sürüm çözmemizi sağlar.
+const MANIFEST_URL: &str =
+    "https://mersel-dss.github.io/mersel-dss-agent-desktop-app/manifest.json";
+
 fn client() -> AppResult<reqwest::Client> {
     let mut headers = reqwest::header::HeaderMap::new();
     // İsteğe bağlı GitHub token'ı (GITHUB_TOKEN / GH_TOKEN). Kimliksiz GitHub API
@@ -33,13 +40,70 @@ fn client() -> AppResult<reqwest::Client> {
         .map_err(AppError::from)
 }
 
-/// İlgili servisin GitHub'daki en güncel release'ini ve jar asset'ini döner.
+/// İlgili servisin en güncel release'ini ve asset'ini döner.
+///
+/// ÖNCE statik CDN manifesti (GitHub Pages) denenir — bu yol `api.github.com`'a
+/// HİÇ dokunmaz, dolayısıyla kurumsal NAT'ta 60 istek/saat limitine takılmaz.
+/// Manifest erişilemezse (ör. Pages henüz yayınlanmadıysa) SON ÇARE olarak
+/// doğrudan GitHub API'ye düşülür (rate-limit'li ama çalışmaya devam etsin).
+pub async fn latest_release(descriptor: &ServiceDescriptor) -> AppResult<ReleaseInfo> {
+    match manifest_release(descriptor).await {
+        Ok(info) => return Ok(info),
+        Err(err) => tracing::debug!(
+            service = descriptor.kind.as_str(),
+            error = %err,
+            "manifestten çözülemedi; GitHub API'ye düşülüyor"
+        ),
+    }
+    api_latest_release(descriptor).await
+}
+
+/// Statik CDN manifestinden ilgili servisin release'ini çözer (api.github.com
+/// kullanmaz). Manifest servis girdisi, `parse_release`'in beklediği biçimle
+/// (tag_name / name / published_at / assets[]) birebir aynıdır.
+async fn manifest_release(descriptor: &ServiceDescriptor) -> AppResult<ReleaseInfo> {
+    let resp = client()?.get(MANIFEST_URL).send().await?;
+    if !resp.status().is_success() {
+        return Err(AppError::ServiceResponse {
+            status: resp.status().as_u16(),
+            body: "manifest indirilemedi".to_string(),
+        });
+    }
+    let json: serde_json::Value = resp.json().await?;
+    let svc = json
+        .get("services")
+        .and_then(|s| s.get(descriptor.kind.as_str()))
+        .ok_or_else(|| {
+            AppError::Invalid(format!(
+                "manifestte '{}' servisi yok",
+                descriptor.kind.as_str()
+            ))
+        })?;
+
+    let info = parse_release(svc, descriptor);
+    // Manifest bayatsa / asset adı değiştiyse uygun asset bulunmayabilir →
+    // API fallback'i tetiklemek için hata dön.
+    let usable = match descriptor.runtime {
+        ServiceRuntime::Java { .. } => info.jar_asset.is_some(),
+        ServiceRuntime::NativePackage { .. } | ServiceRuntime::NativeSingleFile { .. } => {
+            info.package_asset.is_some()
+        }
+    };
+    if !usable {
+        return Err(AppError::Invalid(
+            "manifestte bu platform için uygun asset yok".to_string(),
+        ));
+    }
+    Ok(info)
+}
+
+/// SON ÇARE: doğrudan GitHub API (rate-limit'li). Manifest erişilemezse kullanılır.
 ///
 /// `/releases/latest` uç noktası TASLAK ve PRERELEASE sürümleri DIŞLAR ve böyle
 /// depolarda 404 döner; bu yüzden 404'te tüm release listesine düşüp en yeni
 /// taslak-olmayan (prerelease dahil) sürümü seçeriz. Hız sınırında (403/429)
 /// kullanıcıya gösterilebilir net bir hata döneriz.
-pub async fn latest_release(descriptor: &ServiceDescriptor) -> AppResult<ReleaseInfo> {
+async fn api_latest_release(descriptor: &ServiceDescriptor) -> AppResult<ReleaseInfo> {
     let base = format!(
         "https://api.github.com/repos/{}/{}",
         descriptor.repo_owner, descriptor.repo_name

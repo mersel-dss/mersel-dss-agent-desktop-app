@@ -1,0 +1,58 @@
+name: Servis Manifesti
+
+# NEDEN: İstemcinin kimliksiz api.github.com'a gitmesi kurumsal NAT'ta (tek IP
+# arkasında onlarca kişi) saatlik 60 istek limitini patlatıp 403 veriyordu.
+# Bu workflow servis sürümlerini SUNUCUDA token'la (5000/saat) çözer ve
+# istemcinin tek bir CDN URL'sinden okuyacağı statik manifest.json'ı
+# GitHub Pages'e yayınlar. Böylece istemci api.github.com'a hiç dokunmaz.
+#
+# TEK SEFERLİK KURULUM: Repo Settings → Pages → Source = "GitHub Actions".
+
+on:
+  schedule:
+    # Saatte bir (:17 — tam saat yoğunluğundan kaçınmak için). Yeni servis
+    # sürümleri en geç ~1 saat içinde manifeste yansır.
+    - cron: "17 * * * *"
+  workflow_dispatch: # elle anında tazeleme
+  push:
+    branches: [main, master]
+    paths:
+      - "scripts/build-manifest.mjs"
+      - ".github/workflows/manifest.yml"
+
+# Pages deploy için gerekli izinler.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Aynı anda tek deploy; sıradaki tetikler beklesin (eskiyi iptal etme).
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Manifesti üret
+        run: node scripts/build-manifest.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

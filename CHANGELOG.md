@@ -7,6 +7,29 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ## [Unreleased]
 
+### Değiştirildi
+
+- **Servis sürümleri artık merkezi bir CDN manifestinden çözülüyor.** İstemci
+  son sürüm bilgisini `api.github.com` yerine GitHub Pages'te yayınlanan statik
+  bir `manifest.json`'dan okur (sunucu tarafında token'lı zamanlanmış bir Action
+  saatte bir tazeler). Böylece kimliksiz GitHub API'nin **saatte 60 istek**
+  limiti devre dışı kalır; aynı genel IP (kurumsal NAT) arkasındaki çok sayıda
+  kullanıcı artık 403 almaz. Manifest erişilemezse istemci güvenle eski API
+  yoluna düşer.
+- **Java servisleri yalnız `127.0.0.1` (loopback) dinliyor.** Spring Boot
+  varsayılan `0.0.0.0` bağlanması Windows Defender Firewall'un her servis için
+  izin penceresi açmasına yol açıyordu; servise yalnız bu makineden erişildiği
+  için loopback'e sabitlendi — firewall penceresi hiç çıkmaz ve servis dışarıya
+  açılmaz (daha güvenli).
+- Release'ler CI'da artık **taslak değil, otomatik yayınlanır**; bu, updater'ın
+  `releases/latest` ucunun çalışması için de gereklidir.
+
+### Düzeltildi
+
+- Servislerin "otomatik indirme çalışmıyor" sorununun kök nedeni giderildi:
+  GitHub API hız sınırı (403). Artık manifest yolu kullanıldığından açılışta
+  api.github.com'a istek atılmaz.
+
 ## [0.1.8] - 2026-06-09
 
 ### Eklendi

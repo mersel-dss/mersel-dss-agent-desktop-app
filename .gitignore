@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Servis manifesti workflow'unun ürettiği Pages çıktısı (CI'da üretilir)
+_site
+
 # Paketlenmiş JRE'ler (build sırasında `pnpm fetch-jre` ile indirilir)
 # jre = Java 8 (imza/doğrulama), jre21 = Java 21 (XSLT önizleme)
 src-tauri/resources/jre/*

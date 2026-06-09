@@ -70,7 +70,15 @@ impl ServiceManager {
         command
             .arg("-jar")
             .arg(jar_path)
-            .arg(format!("--server.port={port}"));
+            .arg(format!("--server.port={port}"))
+            // KRİTİK (Windows): Spring Boot varsayılan olarak 0.0.0.0'a (tüm
+            // arayüzler) bağlanır; bu, Windows Defender Firewall'un her servis
+            // için "ağ erişimine izin ver?" kutusunu açmasına yol açar. Servise
+            // yalnız bu makineden (desktop app) erişildiğinden loopback'e
+            // sabitliyoruz: firewall loopback'i filtrelemediği için kutu HİÇ
+            // çıkmaz (yönetici izni de gerekmez) ve servis dışarıya açılmaz
+            // (daha güvenli). base_url/is_reachable da 127.0.0.1 kullanır.
+            .arg("--server.address=127.0.0.1");
         // Spring Boot uygulama argümanları (örn. `--mersel.signer.ui.enabled=false`)
         // mutlaka jar'dan sonra gelmelidir; aksi hâlde JVM bunları kendi seçeneği
         // sanıp "Unrecognized option" ile başlatmayı tümden reddeder.
