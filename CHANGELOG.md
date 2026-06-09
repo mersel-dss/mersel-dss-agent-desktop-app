@@ -7,6 +7,8 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-06-09
+
 ### Eklendi
 
 - **Ayarlar sayfası (`/settings`).** Üst menüye sağa yaslı **Ayarlar** sekmesi
@@ -57,4 +59,5 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
   Zaman Damgası) solda, ikincil gezinme (Sanal Kartlar · Tanılama · Ayarlar)
   sağa yaslı.
 
-[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-desktop-app/compare/HEAD
+[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-desktop-app/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/mersel-dss/mersel-dss-agent-desktop-app/compare/v0.1.0...v0.1.8
