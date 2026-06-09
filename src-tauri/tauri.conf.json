@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Mersel_İmzamatik",
+  "productName": "İmzamatik",
   "version": "0.1.0",
   "identifier": "io.mersel.dss.agent.desktop",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Mersel İmzamatik",
+        "title": "İmzamatik",
         "width": 1180,
         "height": 780,
         "minWidth": 940,

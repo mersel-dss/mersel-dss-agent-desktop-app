@@ -29,6 +29,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
+        // Uygulamanın kendi otomatik güncelleyicisi. Bağımlılık (Cargo.toml) ve
+        // updater yapılandırması (tauri.conf.json) vardı ama plugin BURADA kayıtlı
+        // değildi; bu yüzden frontend'in `check()` çağrısı `plugin:updater|check`
+        // komutunu bulamayıp sessizce "güncelleme yok" dönüyordu.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::new())
         .setup(|app| {
             // Windows'ta yerel (OS) başlık çubuğunu kaldır → çerçevesiz pencere.
