@@ -74,14 +74,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # AppImage (linuxdeploy) düzeltmeleri:
-          # • NO_STRIP: Gömülü JRE/sistem .so'larında modern ELF `.relr.dyn`
-          #   bölümleri linuxdeploy'un `strip` çağrısını patlatıyor
-          #   ("unknown type [0x13] section .relr.dyn"). Strip'i devre dışı bırakır.
-          # • APPIMAGE_EXTRACT_AND_RUN: CI runner'larında FUSE olmayabilir;
-          #   appimagetool/linuxdeploy'u FUSE'suz çalıştırır.
-          NO_STRIP: "true"
-          APPIMAGE_EXTRACT_AND_RUN: "1"
           # Tauri updater imzası (ZORUNLU — createUpdaterArtifacts: true).
           # Bu iki secret tanımlı değilse build BAŞARISIZ olur.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
