@@ -74,6 +74,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GitHub Actions Linux runner'ında FUSE olmadan AppImage çalıştır.
+          APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.platform == 'ubuntu-22.04' && '1' || '' }}
           # Tauri updater imzası (ZORUNLU — createUpdaterArtifacts: true).
           # Bu iki secret tanımlı değilse build BAŞARISIZ olur.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
