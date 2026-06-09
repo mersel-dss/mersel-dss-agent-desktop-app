@@ -4,6 +4,7 @@
 
 import { useEffect, useRef } from "react";
 import {
+  AlertTriangle,
   Download,
   ExternalLink,
   FileText,
@@ -186,9 +187,18 @@ export function ServiceRow({ service, progress }: ServiceRowProps) {
                 {docsButton}
               </>
             ) : !isInstalled ? (
-              <Button size="sm" onClick={handleInstall} disabled={!!installing}>
+              <Button
+                size="sm"
+                variant={service.lastError ? "outline" : "default"}
+                onClick={handleInstall}
+                disabled={!!installing}
+              >
                 <Download />
-                {installing ? "İndiriliyor…" : "İndir ve kur"}
+                {installing
+                  ? "İndiriliyor…"
+                  : service.lastError
+                    ? "Tekrar dene"
+                    : "İndir ve kur"}
               </Button>
             ) : isRunning ? (
               <>
@@ -229,6 +239,17 @@ export function ServiceRow({ service, progress }: ServiceRowProps) {
                   : "Hazırlanıyor…"}
               </span>
             </div>
+          </TableCell>
+        </TableRow>
+      ) : !isInstalled && service.lastError ? (
+        /* Otomatik kurulum başarısız oldu — nedenini göster (sessizce "kurulu
+           değil" bırakma) ve yukarıdaki "Tekrar dene" ile yeniden denenebilir. */
+        <TableRow className="hover:bg-transparent">
+          <TableCell colSpan={5} className="pt-0 pb-3">
+            <p className="flex items-start gap-1.5 text-xs text-destructive">
+              <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+              <span>Otomatik indirme başarısız: {service.lastError}</span>
+            </p>
           </TableCell>
         </TableRow>
       ) : null}

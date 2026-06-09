@@ -46,6 +46,9 @@ pub async fn list_services(
     let data_dir = app_data_dir(&app)?;
     let mut snapshots = Vec::new();
 
+    // Servis-başına son kurulum hatası (auto_setup / install başarısızsa dolu).
+    let setup_errors = state.setup_errors.lock().await.clone();
+
     // Önce manager'dan senkron bilgileri topla (kilit kısa tutulur).
     let mut sync_info = Vec::new();
     {
@@ -99,11 +102,32 @@ pub async fn list_services(
             installed_tag,
             pid,
             externally_managed,
-            last_error: None,
+            // Hatayı yalnızca kurulu olmayan servislerde göster (kurulu/çalışan
+            // servis için eski bir hata mesajı asılı kalmasın).
+            last_error: if matches!(state_value, ServiceState::NotInstalled) {
+                setup_errors.get(&descriptor.kind).cloned()
+            } else {
+                None
+            },
         });
     }
 
     Ok(snapshots)
+}
+
+/// Bir servisin son kurulum hatasını kaydeder (`Some`) veya temizler (`None`).
+/// `list_services` bu haritayı okuyarak hatayı frontend'e taşır.
+async fn set_setup_error(app: &AppHandle, kind: ServiceKind, msg: Option<String>) {
+    let state = app.state::<AppState>();
+    let mut errs = state.setup_errors.lock().await;
+    match msg {
+        Some(m) => {
+            errs.insert(kind, m);
+        }
+        None => {
+            errs.remove(&kind);
+        }
+    }
 }
 
 fn resolve_native_executable(app_data_dir: &Path, kind: ServiceKind) -> Option<PathBuf> {
@@ -252,8 +276,19 @@ pub async fn latest_release(kind: ServiceKind) -> AppResult<ReleaseInfo> {
 #[tauri::command]
 pub async fn install_service(app: AppHandle, kind: ServiceKind) -> AppResult<String> {
     let descriptor = descriptor_for(kind);
-    let release = github::latest_release(&descriptor).await?;
-    download_release(&app, kind, &release).await
+    let result = async {
+        let release = github::latest_release(&descriptor).await?;
+        download_release(&app, kind, &release).await
+    }
+    .await;
+    // Sonucu görünür hata haritasına yansıt (UI'da "Tekrar dene" + neden gösterimi).
+    set_setup_error(
+        &app,
+        kind,
+        result.as_ref().err().map(|e| e.to_string()),
+    )
+    .await;
+    result
 }
 
 /// Bir servisi en güncel sürüme getirir: gerekiyorsa yeni jar'ı indirir ve
@@ -588,12 +623,18 @@ fn cleanup_old_jars(dir: &Path, descriptor: &ServiceDescriptor, keep: &str) {
 /// uygulamanın açılışını asla bloke etmez veya çökertmez.
 pub async fn auto_setup(app: AppHandle) {
     for kind in config::ALL_SERVICES.map(|d| d.kind) {
-        if let Err(err) = ensure_latest(&app, kind).await {
-            tracing::warn!(
-                service = kind.as_str(),
-                error = %err,
-                "otomatik güncelleme atlandı"
-            );
+        match ensure_latest(&app, kind).await {
+            // Başarılı (indirildi veya zaten güncel) → varsa eski hatayı temizle.
+            Ok(_) => set_setup_error(&app, kind, None).await,
+            Err(err) => {
+                tracing::warn!(
+                    service = kind.as_str(),
+                    error = %err,
+                    "otomatik kurulum/güncelleme atlandı"
+                );
+                // Hatayı görünür kıl: kullanıcı neden inmediğini görsün.
+                set_setup_error(&app, kind, Some(err.to_string())).await;
+            }
         }
     }
 

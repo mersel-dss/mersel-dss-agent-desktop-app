@@ -31,6 +31,16 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(AppState::new())
         .setup(|app| {
+            // Windows'ta yerel (OS) başlık çubuğunu kaldır → çerçevesiz pencere.
+            // Özel başlık çubuğu (frontend TopBar) sürükleme + min/maks/kapat
+            // düğmelerini sağlar; böylece görünüm macOS ile birleşir. macOS
+            // overlay (trafik ışıkları) ve Linux yerel dekorasyonu olduğu gibi
+            // kalır (yalnız Windows hedeflenir).
+            #[cfg(windows)]
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.set_decorations(false);
+            }
+
             // Açılışta: jar'ları güncelle ve servisleri boş porttan başlat.
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {

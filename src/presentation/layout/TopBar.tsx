@@ -21,6 +21,8 @@ import { toast } from "sonner";
 import { errorMessage } from "@/shared/lib/errors";
 import { useAppUpdate } from "@/application/update/hooks";
 import { MerselWordmark } from "@/presentation/components/brand/MerselLogo";
+import { WindowControls } from "@/presentation/layout/WindowControls";
+import { IS_WINDOWS } from "@/shared/lib/platform";
 import { cn } from "@/shared/lib/utils";
 
 interface NavItem {
@@ -120,7 +122,12 @@ export function TopBar() {
   return (
     <header
       data-tauri-drag-region
-      className="app-chrome flex h-11 shrink-0 items-stretch gap-1 border-b border-border pr-3 pl-[78px]"
+      className={cn(
+        "app-chrome flex h-11 shrink-0 items-stretch gap-1 border-b border-border",
+        // macOS: solda trafik-ışığı boşluğu. Windows: çerçevesiz pencerede sol
+        // boşluk gerekmez; pencere kontrolleri sağda (aşağıda) yer alır.
+        IS_WINDOWS ? "pl-3 pr-0" : "pr-3 pl-[78px]",
+      )}
     >
       {/* Marka — resmî mersel logosu + İmzamatik */}
       <div className="flex shrink-0 items-center pr-3">
@@ -142,9 +149,12 @@ export function TopBar() {
       </nav>
 
       {/* Sağ: yalnızca güncelleme mevcutsa görünür */}
-      <div className="flex shrink-0 items-center pl-1">
+      <div className="flex shrink-0 items-center px-1">
         <UpdateButton />
       </div>
+
+      {/* Windows: çerçevesiz pencere için özel min/maks/kapat kontrolleri. */}
+      {IS_WINDOWS ? <WindowControls /> : null}
     </header>
   );
 }

@@ -10,27 +10,87 @@ use tokio::io::AsyncWriteExt;
 const USER_AGENT: &str = "mersel-dss-agent-desktop";
 
 fn client() -> AppResult<reqwest::Client> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    // İsteğe bağlı GitHub token'ı (GITHUB_TOKEN / GH_TOKEN). Kimliksiz GitHub API
+    // saatte yalnız 60 istek verir (bu yüzden art arda açılışlarda 403'e takılıp
+    // servisler "kurulu değil" kalabiliyordu); token varsa sınır 5000'e çıkar.
+    // Son kullanıcıda genelde yoktur — asıl çözüm aşağıdaki fallback + görünür
+    // hata; token geliştirme/CI içindir.
+    if let Some(token) = std::env::var("GITHUB_TOKEN")
+        .ok()
+        .filter(|t| !t.is_empty())
+        .or_else(|| std::env::var("GH_TOKEN").ok().filter(|t| !t.is_empty()))
+    {
+        if let Ok(mut value) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
+            value.set_sensitive(true);
+            headers.insert(reqwest::header::AUTHORIZATION, value);
+        }
+    }
     reqwest::Client::builder()
         .user_agent(USER_AGENT)
+        .default_headers(headers)
         .build()
         .map_err(AppError::from)
 }
 
 /// İlgili servisin GitHub'daki en güncel release'ini ve jar asset'ini döner.
+///
+/// `/releases/latest` uç noktası TASLAK ve PRERELEASE sürümleri DIŞLAR ve böyle
+/// depolarda 404 döner; bu yüzden 404'te tüm release listesine düşüp en yeni
+/// taslak-olmayan (prerelease dahil) sürümü seçeriz. Hız sınırında (403/429)
+/// kullanıcıya gösterilebilir net bir hata döneriz.
 pub async fn latest_release(descriptor: &ServiceDescriptor) -> AppResult<ReleaseInfo> {
-    let url = format!(
-        "https://api.github.com/repos/{}/{}/releases/latest",
+    let base = format!(
+        "https://api.github.com/repos/{}/{}",
         descriptor.repo_owner, descriptor.repo_name
     );
-    let resp = client()?.get(&url).send().await?;
-    if !resp.status().is_success() {
+
+    // 1) Kararlı en güncel sürüm (taslak + prerelease hariç).
+    let resp = client()?
+        .get(format!("{base}/releases/latest"))
+        .send()
+        .await?;
+    let status = resp.status();
+    if status.is_success() {
+        let json: serde_json::Value = resp.json().await?;
+        return Ok(parse_release(&json, descriptor));
+    }
+
+    // Hız sınırı → açık mesaj (sessiz 403 yerine).
+    if matches!(status.as_u16(), 403 | 429) {
         return Err(AppError::ServiceResponse {
-            status: resp.status().as_u16(),
-            body: "GitHub release bilgisi alınamadı".to_string(),
+            status: status.as_u16(),
+            body: "GitHub API hız sınırına takıldı (kimliksiz 60 istek/saat). Birkaç dakika sonra tekrar deneyin.".to_string(),
         });
     }
-    let json: serde_json::Value = resp.json().await?;
-    Ok(parse_release(&json, descriptor))
+
+    // 2) 404: depoda yalnızca prerelease/draft olabilir → listele, en yeni
+    //    taslak-olmayanı seç.
+    if status.as_u16() == 404 {
+        let resp = client()?
+            .get(format!("{base}/releases?per_page=10"))
+            .send()
+            .await?;
+        if resp.status().is_success() {
+            let arr: serde_json::Value = resp.json().await?;
+            if let Some(rel) = arr.as_array().and_then(|items| {
+                items
+                    .iter()
+                    .find(|r| !r.get("draft").and_then(|d| d.as_bool()).unwrap_or(false))
+            }) {
+                return Ok(parse_release(rel, descriptor));
+            }
+        }
+        return Err(AppError::ServiceResponse {
+            status: 404,
+            body: "Bu serviste yayınlanmış bir GitHub release bulunamadı.".to_string(),
+        });
+    }
+
+    Err(AppError::ServiceResponse {
+        status: status.as_u16(),
+        body: "GitHub release bilgisi alınamadı".to_string(),
+    })
 }
 
 fn parse_release(json: &serde_json::Value, descriptor: &ServiceDescriptor) -> ReleaseInfo {
