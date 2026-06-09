@@ -64,7 +64,7 @@
       "endpoints": [
         "https://github.com/mersel-dss/mersel-dss-agent-desktop-app/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVBNDE3QjJFM0JDNUU1NDYKUldSRzVjVTdMbnRCV2l2Nms3dUxUNFl3S2pMQy8vVzFadWZMdkhqaUpLYVpRV0ZkUEFDZStVSlMK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdFNzhCREZDRjE1NTQyMgpSV1FpVkJYUDM0dm5CMUVSaGVtaWJUMDRXTFZmOFdLM1MrUDFxa3AwdThDVlRaUjg0aVBaT0RGOQo="
     }
   }
 }

@@ -31,6 +31,10 @@ export class TauriPreviewGateway implements PreviewGateway {
     });
   }
 
+  readFileBytes(signedPath: string): Promise<ArrayBuffer> {
+    return call<ArrayBuffer>("read_file_bytes", { signedPath });
+  }
+
   openInBrowser(html: string, fileName: string): Promise<string> {
     return call<string>("open_preview_in_browser", { html, fileName });
   }

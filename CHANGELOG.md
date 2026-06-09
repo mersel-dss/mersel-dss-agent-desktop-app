@@ -9,6 +9,28 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ### Eklendi
 
+- **Ayarlar sayfası (`/settings`).** Üst menüye sağa yaslı **Ayarlar** sekmesi
+  eklendi. Proje bazında kalıcı tercihler artık `settings.json` (uygulama veri
+  dizini) içinde tutulur:
+  - **Varsayılan imza tercihleri:** İmzala ekranının açılış formatı (PAdES/XAdES)
+    ve varsayılan XAdES türü (XAdES-BES / Counter-Signature). İmza ekranı bu
+    ayarlarla önceden doldurulur.
+  - **Zaman damgası sağlayıcıları:** TSA adresi, müşteri no/kullanıcı adı,
+    parola, protokol (Otomatik / TÜBİTAK ESYA / standart RFC 3161), özet
+    algoritması, `certReq` ve `useNonce` ile birden fazla sağlayıcı eklenip
+    düzenlenebilir; varsayılan sağlayıcı seçilir. Sağlayıcı diyaloğundan
+    **Kontör sorgula** ile TÜBİTAK kimlik/bağlantısı sınanabilir. Kimlik
+    bilgileri yalnızca bu makinede saklanır; ajana işlem anında parametre olarak
+    iletilir.
+- **Zaman Damgası alma (`/timestamp`).** Üst menüye birincil **Zaman Damgası**
+  sekmesi eklendi. Kayıtlı bir sağlayıcı ve belge seçilerek RFC 3161 zaman
+  damgası (TÜBİTAK ESYA dahil) alınır; üretilen token TSA/zaman/seri metadata'sı
+  ile gösterilir ve `.tst` olarak diske kaydedilir. TÜBİTAK sağlayıcılarında kalan
+  kontör satır içi sorgulanabilir.
+  - Tüm ağ çağrıları Rust (Tauri) köprüsü üzerinden yerel ajanın yeni
+    uçlarına gider: `POST /timestamp/get` (binary `.tst` + `X-Timestamp-*`
+    header'ları), `POST /tubitak/credit`, `GET /timestamp/status`. TSA kimlik
+    bilgileri her istekte parametre olarak gönderilir, hiçbir yerde saklanmaz.
 - **Sanal Kart (Dummy Card) yönetimi.** Fiziksel kart takılı olmasa bile bir
   PFX (PKCS#12) dosyası ya da PKCS#11 kütüphanesi "sanal kart" olarak masaüstü
   app içinden tanımlanabilir; ajanın `Sanal Kart Tanımla` masaüstü diyaloğu açık
@@ -31,7 +53,8 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ### Değiştirildi
 
-- Üst menü iki gruba ayrıldı: birincil gezinme (Genel Bakış · İmzala · Doğrula)
-  solda, ikincil gezinme (Sanal Kartlar · Tanılama) sağa yaslı.
+- Üst menü iki gruba ayrıldı: birincil gezinme (Genel Bakış · İmzala · Doğrula ·
+  Zaman Damgası) solda, ikincil gezinme (Sanal Kartlar · Tanılama · Ayarlar)
+  sağa yaslı.
 
 [Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-desktop-app/compare/HEAD

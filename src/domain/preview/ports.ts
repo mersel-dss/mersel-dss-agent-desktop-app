@@ -24,6 +24,11 @@ export interface PreviewGateway {
    */
   readDocumentSource(signedPath: string, index?: number): Promise<string>;
   /**
+   * Dosyanın ham baytlarını döner. PAdES/PDF gibi ikili belgeleri uygulama
+   * içinde gömülü PDF görüntüleyiciyle önizlemek için kullanılır.
+   */
+  readFileBytes(signedPath: string): Promise<ArrayBuffer>;
+  /**
    * Dönüştürülmüş HTML'i geçici bir dosyaya yazıp sistemin varsayılan
    * tarayıcısında açar. Native yazdırma/PDF kullanılamadığında geri-dönüş
    * (fallback) olarak kullanılır. Yazılan geçici dosyanın yolunu döner.

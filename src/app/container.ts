@@ -13,6 +13,8 @@ import type { UpdaterGateway } from "@/domain/update/ports";
 import type { ChangelogGateway } from "@/domain/changelog/ports";
 import type { PreviewGateway } from "@/domain/preview/ports";
 import type { ValidationGateway } from "@/domain/validation/ports";
+import type { TimestampGateway } from "@/domain/timestamp/ports";
+import type { SettingsGateway } from "@/domain/settings/ports";
 
 import { TauriServiceGateway } from "@/infrastructure/tauri/serviceGateway";
 import { TauriSigningGateway } from "@/infrastructure/tauri/signingGateway";
@@ -24,6 +26,8 @@ import { TauriUpdaterGateway } from "@/infrastructure/tauri/updaterGateway";
 import { TauriChangelogGateway } from "@/infrastructure/tauri/changelogGateway";
 import { TauriPreviewGateway } from "@/infrastructure/tauri/previewGateway";
 import { TauriValidationGateway } from "@/infrastructure/tauri/validationGateway";
+import { TauriTimestampGateway } from "@/infrastructure/tauri/timestampGateway";
+import { TauriSettingsGateway } from "@/infrastructure/tauri/settingsGateway";
 
 export interface Container {
   services: ServiceGateway;
@@ -36,6 +40,8 @@ export interface Container {
   changelog: ChangelogGateway;
   preview: PreviewGateway;
   validation: ValidationGateway;
+  timestamp: TimestampGateway;
+  settings: SettingsGateway;
 }
 
 export const container: Container = {
@@ -49,4 +55,6 @@ export const container: Container = {
   changelog: new TauriChangelogGateway(),
   preview: new TauriPreviewGateway(),
   validation: new TauriValidationGateway(),
+  timestamp: new TauriTimestampGateway(),
+  settings: new TauriSettingsGateway(),
 };

@@ -32,14 +32,21 @@ export function certName(cert: Certificate): string {
   return cert.commonName ?? cert.subject ?? cert.certificateId;
 }
 
-export function CertificateInfoCard({ cert }: { cert: Certificate }) {
+export function CertificateInfoCard({
+  cert,
+  /** Bir panelin içine gömülüyken kendi çerçeve/zeminini bırakır. */
+  bare = false,
+}: {
+  cert: Certificate;
+  bare?: boolean;
+}) {
   const status = validity(cert);
   const owner = ownerId(cert);
   const expired = status.tone === "destructive";
   const Icon = expired ? ShieldX : ShieldCheck;
 
   return (
-    <div className="rounded-xl border bg-muted/30 p-4">
+    <div className={cn(!bare && "rounded-xl border bg-muted/30 p-4")}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <span

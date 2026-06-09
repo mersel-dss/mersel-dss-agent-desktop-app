@@ -26,6 +26,8 @@ import { CardCertificateSelect } from "./CardCertificateSelect";
 
 interface SignFormProps {
   mode: "pades" | "xades";
+  /** Ayarlardan gelen varsayılan XAdES imza türü. */
+  defaultContentType?: XadesContentType;
 }
 
 const FILTERS = {
@@ -33,7 +35,10 @@ const FILTERS = {
   xades: [{ name: "XML", extensions: ["xml"] }],
 };
 
-export function SignForm({ mode }: SignFormProps) {
+export function SignForm({
+  mode,
+  defaultContentType = "XADES_BES",
+}: SignFormProps) {
   const { isRunning } = useService("agent");
   const files = useFiles();
   const signPades = useSignPades();
@@ -43,7 +48,8 @@ export function SignForm({ mode }: SignFormProps) {
   const [certificateId, setCertificateId] = useState<string | null>(null);
   const [contentPath, setContentPath] = useState<string | null>(null);
   const [pin, setPin] = useState("");
-  const [contentType, setContentType] = useState<XadesContentType>("XADES_BES");
+  const [contentType, setContentType] =
+    useState<XadesContentType>(defaultContentType);
 
   const pending = signPades.isPending || signXades.isPending;
   const canSubmit =

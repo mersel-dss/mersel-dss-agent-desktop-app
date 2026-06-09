@@ -10,6 +10,7 @@ import {
   CreditCard,
 } from "lucide-react";
 import { useService } from "@/application/services/hooks";
+import { useSettingsValue } from "@/application/settings/hooks";
 import { ScrollPage } from "@/presentation/components/common/ScrollPage";
 import { PageHeader } from "@/presentation/components/common/PageHeader";
 import { ServiceOfflineNotice } from "@/presentation/components/common/ServiceOfflineNotice";
@@ -80,6 +81,7 @@ function SignGuide() {
 
 export function SignPage() {
   const { isRunning } = useService("agent");
+  const { signing } = useSettingsValue();
 
   if (!isRunning) {
     return (
@@ -105,7 +107,10 @@ export function SignPage() {
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <Card className="min-w-0 flex-1 lg:max-w-2xl">
           <CardContent className="pt-6">
-            <Tabs defaultValue="pades">
+            <Tabs
+              key={`${signing.defaultMode}-${signing.xadesContentType}`}
+              defaultValue={signing.defaultMode}
+            >
               <TabsList className="mb-6">
                 <TabsTrigger value="pades">
                   <FileText className="h-4 w-4" />
@@ -120,7 +125,10 @@ export function SignPage() {
                 <SignForm mode="pades" />
               </TabsContent>
               <TabsContent value="xades">
-                <SignForm mode="xades" />
+                <SignForm
+                  mode="xades"
+                  defaultContentType={signing.xadesContentType}
+                />
               </TabsContent>
             </Tabs>
           </CardContent>

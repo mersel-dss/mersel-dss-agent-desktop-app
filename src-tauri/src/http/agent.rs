@@ -69,6 +69,109 @@ pub async fn sign_xades(
     Ok(resp.bytes().await?.to_vec())
 }
 
+/// Bir RFC 3161 zaman damgası alma sonucu. Binary `.tst` token'ı + agent'ın
+/// `X-Timestamp-*` yanıt header'larından çözülen metadata.
+pub struct AgentTimestamp {
+    pub token: Vec<u8>,
+    pub timestamp: Option<String>,
+    pub tsa_name: Option<String>,
+    pub serial_number: Option<String>,
+    pub hash_algorithm: Option<String>,
+    pub nonce: Option<String>,
+}
+
+/// Yüklenen belge için zaman damgası alır. `POST /timestamp/get`
+///
+/// TSA adresi ve kimlik bilgileri her istekte parametre olarak gönderilir
+/// (agent hiçbir kimlik saklamaz). Token binary `.tst` olarak, metadata ise
+/// `X-Timestamp-*` header'larında döner.
+#[allow(clippy::too_many_arguments)]
+pub async fn get_timestamp(
+    port: u16,
+    document_path: &Path,
+    hash_algorithm: &str,
+    tsa_url: &str,
+    ts_user_id: Option<&str>,
+    ts_user_password: Option<&str>,
+    tubitak: Option<bool>,
+    cert_req: bool,
+    use_nonce: bool,
+) -> AppResult<AgentTimestamp> {
+    let mut form = reqwest::multipart::Form::new()
+        .part("document", file_part(document_path).await?)
+        .text("hashAlgorithm", hash_algorithm.to_string())
+        .text("tsaUrl", tsa_url.to_string())
+        .text("certReq", cert_req.to_string())
+        .text("useNonce", use_nonce.to_string());
+
+    if let Some(id) = ts_user_id.filter(|v| !v.is_empty()) {
+        form = form.text("tsUserId", id.to_string());
+    }
+    if let Some(pw) = ts_user_password.filter(|v| !v.is_empty()) {
+        form = form.text("tsUserPassword", pw.to_string());
+    }
+    if let Some(t) = tubitak {
+        form = form.text("tubitak", t.to_string());
+    }
+
+    let url = format!("{}/timestamp/get", base_url(port));
+    let resp = ensure_success(long_client()?.post(url).multipart(form).send().await?).await?;
+
+    let headers = resp.headers().clone();
+    let header = |name: &str| -> Option<String> {
+        headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+
+    let timestamp = header("X-Timestamp-Time");
+    let tsa_name = header("X-Timestamp-TSA");
+    let serial_number = header("X-Timestamp-Serial");
+    let hash_algorithm = header("X-Timestamp-Hash-Algorithm");
+    let nonce = header("X-Timestamp-Nonce");
+
+    let token = resp.bytes().await?.to_vec();
+    Ok(AgentTimestamp {
+        token,
+        timestamp,
+        tsa_name,
+        serial_number,
+        hash_algorithm,
+        nonce,
+    })
+}
+
+/// TÜBİTAK ESYA zaman damgası kalan kontör bilgisini sorgular.
+/// `POST /tubitak/credit` — kimlik bilgileri multipart parametre olarak gönderilir.
+pub async fn tubitak_credit(
+    port: u16,
+    tsa_url: &str,
+    ts_user_id: &str,
+    ts_user_password: &str,
+    tubitak: Option<bool>,
+) -> AppResult<serde_json::Value> {
+    let mut form = reqwest::multipart::Form::new()
+        .text("tsaUrl", tsa_url.to_string())
+        .text("tsUserId", ts_user_id.to_string())
+        .text("tsUserPassword", ts_user_password.to_string());
+    if let Some(t) = tubitak {
+        form = form.text("tubitak", t.to_string());
+    }
+
+    let url = format!("{}/tubitak/credit", base_url(port));
+    let resp = ensure_success(long_client()?.post(url).multipart(form).send().await?).await?;
+    Ok(resp.json().await?)
+}
+
+/// Zaman damgası özelliğinin durumunu sorgular. `GET /timestamp/status`
+pub async fn timestamp_status(port: u16) -> AppResult<serde_json::Value> {
+    let url = format!("{}/timestamp/status", base_url(port));
+    let resp = ensure_success(long_client()?.get(url).send().await?).await?;
+    Ok(resp.json().await?)
+}
+
 /// Tanımlı sanal kartları listeler. `GET /smartcard/virtual`
 pub async fn list_virtual_cards(port: u16) -> AppResult<serde_json::Value> {
     let url = format!("{}/smartcard/virtual", base_url(port));

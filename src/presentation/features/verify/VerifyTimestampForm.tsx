@@ -49,10 +49,9 @@ export function VerifyTimestampForm() {
       <div className="space-y-4 border-t border-dashed border-border/70 pt-5">
         <FileDropField
           label="Zaman damgası dosyası"
-          hint=".tsr / .tst"
+          hint="Her türlü dosya (.tsq / .tsr / .tst)"
           value={timestampPath}
           onChange={setTimestampPath}
-          filters={[{ name: "Zaman damgası", extensions: ["tsr", "tst"] }]}
         />
         <FileDropField
           label="Orijinal veri"
@@ -82,7 +81,7 @@ export function VerifyTimestampForm() {
     <ResultPlaceholder
       icon={<Clock className="h-7 w-7" />}
       title="Zaman damgası sonucu burada görünecek"
-      description="Soldan bir .tsr/.tst dosyası seçip “Doğrula”ya basın. TSA bilgisi, message imprint ve sertifika bu alanda listelenir."
+      description="Soldan bir zaman damgası dosyası (.tsq/.tsr/.tst farketmez) seçip “Doğrula”ya basın. TSA bilgisi, message imprint ve sertifika bu alanda listelenir."
       highlights={["RFC 3161", "TSA sertifikası", "Message imprint"]}
     />
   );

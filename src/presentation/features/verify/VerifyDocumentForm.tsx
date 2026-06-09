@@ -12,6 +12,7 @@ import { errorMessage } from "@/shared/lib/errors";
 import { cn } from "@/shared/lib/utils";
 import { useVerifyDocument } from "@/application/verification/hooks";
 import { useService } from "@/application/services/hooks";
+import { usePreviewOutline } from "@/application/preview/hooks";
 import type { VerificationLevel } from "@/domain/verification/types";
 import { Button } from "@/presentation/components/ui/button";
 import { Label } from "@/presentation/components/ui/label";
@@ -157,42 +158,58 @@ export function VerifyDocumentForm() {
   // "İmza ↔ Geçerlilik ↔ Önizleme" geçişi sun: imza doğrulaması, GİB şema/
   // şematron geçerlilik kontrolü ve belgenin kâğıttaki görünümü tek ekranda.
   const canInspect = !!data && !!signedPath && xslt.isRunning;
-  const activeTab = canInspect ? resultTab : "verify";
-  const sourceView = canInspect && showSource;
+  // PAdES/PDF gibi ikili belgelerde şema/şematron doğrulaması ve ham XML kaynağı
+  // anlamsızdır; bu sekmeler gizlenir, önizleme ise gömülü PDF görüntüleyiciye düşer.
+  const outline = usePreviewOutline(canInspect ? signedPath : null);
+  const isPdf = outline.data?.kind === "binary";
+  // Ham XML kaynağı yalnızca içerik tümüyle XML ise (tekil belge ya da e-Belge
+  // zarfı) anlamlıdır; PDF gibi ikili belgelerde ya da tür henüz çözülmemişken yok.
+  const isXml =
+    outline.data?.kind === "single" || outline.data?.kind === "envelope";
+  // PDF'te "Şema & Şematron Kontrolü" sekmesi yoksa o sekmeye düşmeyi engelle.
+  const effectiveTab = isPdf && resultTab === "validate" ? "verify" : resultTab;
+  const activeTab = canInspect ? effectiveTab : "verify";
+  const sourceView = canInspect && isXml && showSource;
+  const tabOptions: { value: ResultTab; label: string }[] = [
+    { value: "verify", label: "İmza" },
+    ...(isPdf
+      ? []
+      : [{ value: "validate" as const, label: "Şema & Şematron Kontrolü" }]),
+    { value: "preview", label: "Önizleme" },
+  ];
   const result = (
     <div className="flex h-full min-h-0 flex-col">
       {canInspect ? (
         <div className="mb-4 flex shrink-0 flex-wrap items-center gap-3">
           <div className="w-fit max-w-full">
             <SegmentedToggle
-              value={resultTab}
+              value={effectiveTab}
               onChange={(v) => {
                 setResultTab(v);
                 setShowSource(false);
               }}
-              options={[
-                { value: "verify", label: "İmza" },
-                { value: "validate", label: "Şema & Şematron Kontrolü" },
-                { value: "preview", label: "Önizleme" },
-              ]}
+              options={tabOptions}
             />
           </div>
-          {/* Tabların en sağında: tüm tablardan bağımsız ham XML kaynağı geçişi. */}
-          <button
-            type="button"
-            onClick={() => setShowSource((s) => !s)}
-            aria-pressed={showSource}
-            className={cn(
-              "ml-auto flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[13px] font-medium transition-colors",
-              showSource
-                ? "border-[rgb(var(--accent))]/40 bg-brand-soft text-foreground"
-                : "border-border bg-surface-muted text-fg-muted hover:text-foreground",
-            )}
-            title="Belgenin ham XML kaynağını göster"
-          >
-            <CodeXml className="h-4 w-4" />
-            XML Kaynağını göster
-          </button>
+          {/* Tabların en sağında: tüm tablardan bağımsız ham XML kaynağı geçişi.
+              Yalnızca içerik tümüyle XML ise gösterilir (PDF/ikili belgede yok). */}
+          {isXml ? (
+            <button
+              type="button"
+              onClick={() => setShowSource((s) => !s)}
+              aria-pressed={showSource}
+              className={cn(
+                "ml-auto flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[13px] font-medium transition-colors",
+                showSource
+                  ? "border-[rgb(var(--accent))]/40 bg-brand-soft text-foreground"
+                  : "border-border bg-surface-muted text-fg-muted hover:text-foreground",
+              )}
+              title="Belgenin ham XML kaynağını göster"
+            >
+              <CodeXml className="h-4 w-4" />
+              XML Kaynağını göster
+            </button>
+          ) : null}
         </div>
       ) : null}
       <div

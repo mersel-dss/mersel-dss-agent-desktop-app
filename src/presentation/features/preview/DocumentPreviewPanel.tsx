@@ -25,6 +25,7 @@ import { container } from "@/app/container";
 import { useService } from "@/application/services/hooks";
 import {
   usePreviewDocument,
+  usePreviewFileBytes,
   usePreviewOutline,
 } from "@/application/preview/hooks";
 import type { PreviewDocumentMeta } from "@/domain/preview/types";
@@ -121,16 +122,18 @@ export function DocumentPreviewPanel({ signedPath }: { signedPath: string }) {
     );
   }
 
+  // PAdES/PDF gibi ikili belgeler HTML'e dönüştürülemez; bunun yerine dosyayı
+  // doğrudan gömülü PDF görüntüleyicide gösteririz.
+  if (outline.data?.kind === "binary") {
+    return <PdfPreview signedPath={signedPath} />;
+  }
+
   if (!previewable || documents.length === 0) {
     return (
       <EmptyState
         icon={FileX}
         title="Bu belge önizlenemiyor"
-        description={
-          outline.data?.kind === "binary"
-            ? "PDF gibi ikili belgeler için HTML önizleme sunulamaz. Önizleme yalnızca e-Belge XML'leri içindir."
-            : "Dosya içinde görüntülenebilir bir e-Belge tespit edilemedi."
-        }
+        description="Dosya içinde görüntülenebilir bir e-Belge tespit edilemedi."
       />
     );
   }
@@ -304,7 +307,7 @@ export function DocumentPreviewPanel({ signedPath }: { signedPath: string }) {
         </div>
       </div>
 
-      {/* Render alanı */}
+      {/* Render alanı (XML → HTML) */}
       <div className="relative mt-3 min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-white">
         {preview.isLoading ? (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 text-fg-dim">
@@ -327,6 +330,71 @@ export function DocumentPreviewPanel({ signedPath }: { signedPath: string }) {
             sandbox="allow-same-origin allow-modals"
             srcDoc={preview.data.html}
             className="h-full w-full border-0 bg-white"
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** Verilen yoldan dosya adının (uzantısız) gövdesini çıkarır. */
+function fileBaseName(path: string): string {
+  const name = path.split(/[\\/]/).pop() ?? path;
+  return name || "belge";
+}
+
+/**
+ * PAdES/PDF gibi ikili belgelerin gömülü PDF görüntüleyicide önizlemesi. Dosyanın
+ * ham baytları okunup bir `Blob` URL'ine dönüştürülür ve webview'in native PDF
+ * görüntüleyicisinde (iframe) gösterilir.
+ */
+function PdfPreview({ signedPath }: { signedPath: string }) {
+  const bytes = usePreviewFileBytes(signedPath, true);
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!bytes.data) {
+      setObjectUrl(null);
+      return;
+    }
+    const blob = new Blob([bytes.data], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    setObjectUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [bytes.data]);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-3">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <FileText className="h-4 w-4 text-fg-dim" />
+          {fileBaseName(signedPath)}
+        </div>
+        <Badge variant="secondary" className="ml-auto">
+          PDF
+        </Badge>
+      </div>
+
+      <div className="relative mt-3 min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-surface-muted">
+        {bytes.isLoading ? (
+          <div className="absolute inset-0 z-10 flex items-center justify-center text-fg-dim">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        ) : null}
+
+        {bytes.isError ? (
+          <div className="flex h-full items-center justify-center p-6">
+            <EmptyState
+              icon={FileX}
+              title="PDF açılamadı"
+              description={errorMessage(bytes.error)}
+            />
+          </div>
+        ) : objectUrl ? (
+          <iframe
+            title="PDF önizleme"
+            src={objectUrl}
+            className="h-full w-full border-0"
           />
         ) : null}
       </div>

@@ -11,6 +11,7 @@ export const previewKeys = {
     ["preview-document", path, index, useEmbedded] as const,
   source: (path: string, index: number) =>
     ["preview-source", path, index] as const,
+  bytes: (path: string) => ["preview-bytes", path] as const,
 };
 
 /** Dosyadaki önizlenebilir belgelerin başlıklarını çözer (dönüşüm yapmaz). */
@@ -38,6 +39,22 @@ export function usePreviewDocument(
         index,
         useEmbeddedXslt,
       }),
+    enabled: enabled && !!signedPath,
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * Dosyanın ham baytlarını döner — PAdES/PDF gibi ikili belgeleri gömülü PDF
+ * görüntüleyiciyle önizlemek için. Bayt dizisinden bir `Blob` URL'i kurulur.
+ */
+export function usePreviewFileBytes(
+  signedPath: string | null,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: previewKeys.bytes(signedPath ?? ""),
+    queryFn: () => container.preview.readFileBytes(signedPath!),
     enabled: enabled && !!signedPath,
     staleTime: 60_000,
   });

@@ -9,6 +9,7 @@ use crate::error::{AppError, AppResult};
 use crate::http::xslt::{self, TransformOutput};
 use crate::models::ServiceKind;
 use crate::state::AppState;
+use tauri::ipc::Response;
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 
@@ -172,6 +173,16 @@ pub async fn read_document_source(
 
     // Tekil XML belge — dosyanın tamamını döndür.
     Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// Verilen dosyanın **ham baytlarını** döner (PAdES/PDF gibi ikili belgelerin
+/// uygulama içinde PDF görüntüleyiciyle önizlenmesi için). XSLT servisini
+/// çağırmaz; baytlar IPC üzerinden ham (binary) yanıt olarak iletilir, böylece
+/// frontend bir `Blob` URL'i kurup gömülü PDF görüntüleyicide gösterebilir.
+#[tauri::command]
+pub async fn read_file_bytes(signed_path: String) -> AppResult<Response> {
+    let bytes = tokio::fs::read(&signed_path).await?;
+    Ok(Response::new(bytes))
 }
 
 /// Verilen dosyadaki belirli bir belgeyi (zarfta `index`, tekilde 0) XSLT servisi

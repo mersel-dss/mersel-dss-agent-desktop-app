@@ -7,11 +7,13 @@
 import { NavLink } from "react-router-dom";
 import {
   Activity,
+  Clock,
   CreditCard,
   DownloadCloud,
   FileSignature,
   LayoutDashboard,
   Loader2,
+  Settings2,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -30,7 +32,12 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Genel Bakış", icon: LayoutDashboard, end: true },
-  { to: "/sign", label: "İmzala", icon: FileSignature },
+  { to: "/sign", label: "Döküman İmzala", icon: FileSignature },
+  { to: "/timestamp", label: "Zaman Damgası Al", icon: Clock },
+];
+
+/** Oluşturma akışlarından ayrılan doğrulama grubu. */
+const VERIFY_NAV_ITEMS: NavItem[] = [
   { to: "/verify", label: "Doğrula", icon: ShieldCheck },
 ];
 
@@ -38,6 +45,7 @@ const NAV_ITEMS: NavItem[] = [
 const SECONDARY_NAV_ITEMS: NavItem[] = [
   { to: "/virtual-cards", label: "Sanal Kartlar", icon: CreditCard },
   { to: "/diagnostics", label: "Tanılama", icon: Activity },
+  { to: "/settings", label: "Ayarlar", icon: Settings2 },
 ];
 
 function NavLinks({ items }: { items: NavItem[] }) {
@@ -121,9 +129,11 @@ export function TopBar() {
 
       <span aria-hidden className="my-2.5 w-px shrink-0 bg-border" />
 
-      {/* Birincil yatay gezinme — aktif öğe alt-çizgi göstergesiyle */}
+      {/* Birincil yatay gezinme — oluşturma akışları + divider ile ayrılan doğrulama */}
       <nav className="flex items-stretch gap-0.5 overflow-x-auto">
         <NavLinks items={NAV_ITEMS} />
+        <span aria-hidden className="my-2.5 mx-1.5 w-px shrink-0 bg-border" />
+        <NavLinks items={VERIFY_NAV_ITEMS} />
       </nav>
 
       {/* İkincil gezinme — sağa yaslı */}
