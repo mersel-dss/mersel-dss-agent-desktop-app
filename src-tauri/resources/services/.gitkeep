@@ -1,0 +1,5 @@
+Gömülü Java servisleri dizini. İçerik `pnpm fetch-services` ile doldurulur ve
+.gitignore ile sürüm kontrolünden hariç tutulur; yalnızca bu dosya izlenir.
+
+Her servis kendi alt dizinine (agent/ verifier/ xslt/) jar olarak gömülür.
+`.NET html-to-pdf` servisi gömülmez; çalışma anında indirilir.

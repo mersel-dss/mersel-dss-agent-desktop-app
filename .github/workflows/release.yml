@@ -71,6 +71,15 @@ jobs:
       - name: Platforma özel JRE'leri göm (Java 8 + Java 21)
         run: pnpm fetch-jre
 
+      # Java servislerinin (agent/verifier/xslt) EN GÜNCEL jar'larını installer'a
+      # göm. Sürüm bu build anına KİLİTLENİR (services.lock.json); çalışma anında
+      # GitHub'dan indirme gerekmez (kurumsal proxy/çevrimdışı ortamda da çalışır).
+      # Token rate-limit'i aşmak için. `.NET html-to-pdf` bilinçli olarak gömülmez.
+      - name: Java servislerini göm (agent + verifier + xslt)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm fetch-services
+
       - name: Build + imzalı updater artefaktları + Release
         uses: tauri-apps/tauri-action@v0
         env:

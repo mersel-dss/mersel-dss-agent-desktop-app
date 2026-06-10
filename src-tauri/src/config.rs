@@ -133,6 +133,17 @@ pub fn jars_dir(app_data_dir: &Path, kind: ServiceKind) -> PathBuf {
     app_data_dir.join("services").join(kind.as_str())
 }
 
+/// Bir servisin GÖMÜLÜ (paketlenmiş, build-time'da `pnpm fetch-services` ile
+/// yerleştirilmiş) artifact dizini: `<resource_dir>/services/<kind>`. Dizin
+/// yoksa `None` (servis gömülmemiş → çağıran runtime-indirme yoluna düşer).
+///
+/// Gömülü artifact'lar SALT-OKUNUR'dur (paket içinde); bu yüzden çalıştırırken
+/// çalışma dizini (cwd) ayrıca yazılabilir bir dizine (`jars_dir`) sabitlenir.
+pub fn bundled_service_dir(app: &AppHandle, kind: ServiceKind) -> Option<PathBuf> {
+    let dir = app.path().resource_dir().ok()?.join("services").join(kind.as_str());
+    dir.exists().then_some(dir)
+}
+
 /// Native paketli servislerin aktif kurulum dizini.
 pub fn native_current_dir(app_data_dir: &Path, kind: ServiceKind) -> PathBuf {
     jars_dir(app_data_dir, kind).join("current")

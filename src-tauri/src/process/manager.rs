@@ -52,6 +52,7 @@ impl ServiceManager {
         port: u16,
         assets_dir: Option<&Path>,
         launch_log_path: Option<&Path>,
+        work_dir: Option<&Path>,
     ) -> AppResult<u32> {
         if self.is_running(descriptor.kind) {
             return Err(AppError::AlreadyRunning(
@@ -64,6 +65,12 @@ impl ServiceManager {
 
         let mut command = Command::new(java_exe);
         command.arg("-Djava.awt.headless=true");
+        // Soğuk başlatmayı kısaltan, tüm HotSpot sürümlerinde güvenli JVM
+        // bayrakları (jar'dan ÖNCE — bunlar JVM seçeneği). Servislerin açılış
+        // anında en hızlı hazır olması birincil hedef.
+        for flag in fast_start_jvm_args() {
+            command.arg(flag);
+        }
         // Yalnız ortam değişkenlerini (ve gerekiyorsa JVM seçeneklerini) ayarlar;
         // Spring uygulama argümanları jar'dan SONRA eklenir (aşağıya bkz.).
         configure_silent_env(&mut command, descriptor.kind, assets_dir);
@@ -86,14 +93,20 @@ impl ServiceManager {
             command.arg(arg);
         }
 
-        // KRİTİK: Java sürecinin çalışma dizinini jar'ın (yazılabilir) klasörüne
-        // sabitle. Aksi hâlde paketli uygulama Finder/Dock'tan açıldığında alt
-        // süreç CWD'sini `/` (kök) olarak miras alır; Spring Boot'un logback
+        // KRİTİK: Java sürecinin çalışma dizinini YAZILABİLİR bir klasöre sabitle.
+        // Aksi hâlde paketli uygulama Finder/Dock'tan açıldığında alt süreç
+        // CWD'sini `/` (kök) olarak miras alır; Spring Boot'un logback
         // yapılandırması göreli `./logs/...` yoluna yazmaya çalışıp
         // "FileNotFoundException: /./logs/application.log" ile başlatmayı tümden
-        // reddeder. jar `<data_dir>/services/<kind>/` altında olduğundan bu dizin
-        // her zaman yazılabilirdir ve loglar servis başına ayrışır.
-        if let Some(dir) = jar_path.parent() {
+        // reddeder.
+        //
+        // `work_dir` verilirse o kullanılır — GÖMÜLÜ (salt-okunur paket içi) jar'lar
+        // için ZORUNLU: jar'ın bulunduğu `<resource_dir>/services/<kind>` yazılamaz,
+        // bu yüzden çağıran cwd'yi yazılabilir `<data_dir>/services/<kind>`'e
+        // sabitler. `work_dir` yoksa jar'ın klasörüne (indirilmiş, yazılabilir)
+        // düşülür. Her iki durumda da loglar servis başına ayrışır.
+        let cwd = work_dir.or_else(|| jar_path.parent());
+        if let Some(dir) = cwd {
             let _ = std::fs::create_dir_all(dir);
             command.current_dir(dir);
         }
@@ -250,6 +263,19 @@ impl ServiceManager {
     pub fn launch_log_path(&self, kind: ServiceKind) -> Option<PathBuf> {
         self.running.get(&kind).and_then(|s| s.launch_log_path.clone())
     }
+}
+
+/// JVM soğuk başlatmasını kısaltan, tüm HotSpot sürümlerinde (Java 8 ve 21
+/// dahil) güvenli ve geri alınabilir bayraklar. `-jar`'dan ÖNCE eklenir.
+///
+/// - `-XX:TieredStopAtLevel=1`: JIT'i yalnız C1 katmanında tutar → çok daha hızlı
+///   kalkış. Uzun ömürlü tepe verimi hafifçe düşer ama bu servisler seyrek,
+///   kısa istekler işlediğinden açılış hızı çok daha değerlidir (Spring Boot'un
+///   klasik "hızlı başlat" bayrağı).
+/// - `-Xshare:auto`: Class Data Sharing arşivi varsa kullan, yoksa sessizce
+///   atla → sınıf yükleme hızlanır, hiçbir koşulda başlatmayı engellemez.
+fn fast_start_jvm_args() -> &'static [&'static str] {
+    &["-XX:TieredStopAtLevel=1", "-Xshare:auto"]
 }
 
 /// Bir servisin jar'dan SONRA eklenecek Spring Boot uygulama argümanlarını döner.

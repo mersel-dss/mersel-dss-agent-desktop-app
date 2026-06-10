@@ -22,6 +22,12 @@ src-tauri/resources/jre/*
 src-tauri/resources/jre21/*
 !src-tauri/resources/jre21/.gitkeep
 
+# Build sırasında `pnpm fetch-services` ile gömülen Java servis jar'ları
+# (agent/ verifier/ xslt/). Sürüm DESKTOP UYGULAMASINA kilitlenir; yalnız
+# klasör yapısı (.gitkeep) izlenir, jar içeriği ve sürüm kilidi hariç tutulur.
+src-tauri/resources/services/*
+!src-tauri/resources/services/.gitkeep
+
 # Tauri updater imza anahtarları (GİZLİ — repoya commit'lenmemeli)
 src-tauri/.tauri/
 *.key

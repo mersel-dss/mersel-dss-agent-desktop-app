@@ -61,8 +61,10 @@ pub async fn list_services(
                 .unwrap_or(descriptor.default_port);
             let artifact_path = manager
                 .jar_path(descriptor.kind)
-                .or_else(|| resolve_installed_artifact(&data_dir, &descriptor));
-            let installed_tag = version::read(&data_dir, descriptor.kind).map(|m| m.tag);
+                .or_else(|| resolve_effective_artifact(&app, &descriptor));
+            // Sürüm: ÖNCE gömülü kilidi (services.lock.json), yoksa indirilmiş meta.
+            let installed_tag = read_bundled_lock_tag(&app, descriptor.kind)
+                .or_else(|| version::read(&data_dir, descriptor.kind).map(|m| m.tag));
             sync_info.push((descriptor, running, pid, port, artifact_path, installed_tag));
         }
     }
@@ -153,6 +155,52 @@ fn resolve_installed_artifact(
     }
 }
 
+/// GÖMÜLÜ (build-time'da `pnpm fetch-services` ile paketlenmiş) artifact'ı çözer.
+/// Gömülü dizin yoksa veya içinde uygun artifact yoksa `None`. Gömülü artifact
+/// sürüm-kilitlidir ve çalışma anında ağ/GitHub gerektirmez.
+fn resolve_bundled_artifact(app: &AppHandle, descriptor: &ServiceDescriptor) -> Option<PathBuf> {
+    let dir = config::bundled_service_dir(app, descriptor.kind)?;
+    match descriptor.runtime {
+        ServiceRuntime::Java { .. } => jar::resolve_jar(&dir, descriptor),
+        ServiceRuntime::NativePackage { .. } => {
+            let exe = dir.join("current").join(config::native_executable_name());
+            exe.exists().then_some(exe)
+        }
+        ServiceRuntime::NativeSingleFile { .. } => {
+            let exe = dir.join(config::single_file_binary_name());
+            exe.exists().then_some(exe)
+        }
+    }
+}
+
+/// Bir servisin kullanılacak artifact'ını çözer: ÖNCE gömülü (sürüm-kilitli,
+/// çevrimdışı/proxy'de çalışır), yoksa indirilmiş (runtime fallback).
+fn resolve_effective_artifact(app: &AppHandle, descriptor: &ServiceDescriptor) -> Option<PathBuf> {
+    if let Some(p) = resolve_bundled_artifact(app, descriptor) {
+        return Some(p);
+    }
+    let data_dir = app_data_dir(app).ok()?;
+    resolve_installed_artifact(&data_dir, descriptor)
+}
+
+/// Gömülü servis sürüm kilidinden (`services.lock.json`) ilgili servisin
+/// release etiketini okur. Gömülü değilse / dosya yoksa `None`.
+fn read_bundled_lock_tag(app: &AppHandle, kind: ServiceKind) -> Option<String> {
+    let path = app
+        .path()
+        .resource_dir()
+        .ok()?
+        .join("services")
+        .join("services.lock.json");
+    let bytes = std::fs::read(path).ok()?;
+    let json: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    json.get("services")?
+        .get(kind.as_str())?
+        .get("tag")?
+        .as_str()
+        .map(|s| s.to_string())
+}
+
 /// Java çalıştırılabilirini ve servis jar yolunu çözer.
 ///
 /// Her servis **kendi minimum Java sürümünü** ister (imza/doğrulama Java 8,
@@ -180,8 +228,10 @@ async fn resolve_java_launch(app: &AppHandle, kind: ServiceKind) -> AppResult<(S
         required: min_major,
     })?;
 
+    // ÖNCE gömülü jar (sürüm-kilitli), yoksa indirilmiş jar.
     let jars_dir = config::jars_dir(&data_dir, kind);
-    let jar_path = jar::resolve_jar(&jars_dir, &descriptor)
+    let jar_path = resolve_bundled_artifact(app, &descriptor)
+        .or_else(|| jar::resolve_jar(&jars_dir, &descriptor))
         .ok_or_else(|| AppError::JarNotFound(jars_dir.display().to_string()))?;
 
     Ok((java_exe, jar_path))
@@ -189,14 +239,17 @@ async fn resolve_java_launch(app: &AppHandle, kind: ServiceKind) -> AppResult<(S
 
 fn resolve_native_launch(app: &AppHandle, kind: ServiceKind) -> AppResult<PathBuf> {
     let data_dir = app_data_dir(app)?;
-    resolve_native_executable(&data_dir, kind).ok_or_else(|| {
-        AppError::JarNotFound(
-            config::native_current_dir(&data_dir, kind)
-                .join(config::native_executable_name())
-                .display()
-                .to_string(),
-        )
-    })
+    // ÖNCE gömülü native (varsa), yoksa indirilmiş.
+    resolve_bundled_artifact(app, &descriptor_for(kind))
+        .or_else(|| resolve_native_executable(&data_dir, kind))
+        .ok_or_else(|| {
+            AppError::JarNotFound(
+                config::native_current_dir(&data_dir, kind)
+                    .join(config::native_executable_name())
+                    .display()
+                    .to_string(),
+            )
+        })
 }
 
 /// Bir servisi çözümler (Java + jar), tercih edilen porttan başlayarak ilk boş
@@ -222,6 +275,13 @@ async fn launch_service(app: &AppHandle, kind: ServiceKind) -> AppResult<u32> {
                 None
             };
 
+            // Çalışma dizini DAİMA yazılabilir `<data_dir>/services/<kind>` olur.
+            // Gömülü jar salt-okunur paket içinde olduğundan cwd olarak kullanılamaz;
+            // Spring Boot logback'i göreli `./logs/...`'a buraya yazar (loglar servis
+            // başına ayrışır, gömülü/indirilmiş fark etmez).
+            let work_dir = config::jars_dir(&data_dir, kind);
+            let _ = tokio::fs::create_dir_all(&work_dir).await;
+
             let state = app.state::<AppState>();
             let mut manager = state.manager.lock().await;
             manager.start_java(
@@ -231,6 +291,7 @@ async fn launch_service(app: &AppHandle, kind: ServiceKind) -> AppResult<u32> {
                 port,
                 assets_dir.as_deref(),
                 Some(&log_path),
+                Some(&work_dir),
             )
         }
         ServiceRuntime::NativePackage { .. } => {
@@ -642,22 +703,37 @@ fn cleanup_old_jars(dir: &Path, descriptor: &ServiceDescriptor, keep: &str) {
 /// Ağ yoksa veya bir adım başarısız olursa sessizce loglar ve devam eder;
 /// uygulamanın açılışını asla bloke etmez veya çökertmez.
 pub async fn auto_setup(app: AppHandle) {
-    for kind in config::ALL_SERVICES.map(|d| d.kind) {
-        match ensure_latest(&app, kind).await {
-            // Başarılı (indirildi veya zaten güncel) → varsa eski hatayı temizle.
-            Ok(_) => set_setup_error(&app, kind, None).await,
-            Err(err) => {
-                tracing::warn!(
-                    service = kind.as_str(),
-                    error = %err,
-                    "otomatik kurulum/güncelleme atlandı"
-                );
-                // Hatayı görünür kıl: kullanıcı neden inmediğini görsün.
-                set_setup_error(&app, kind, Some(err.to_string())).await;
+    // 1) Tüm servisleri PARALEL olarak en güncel sürüme getir. Her servis
+    //    bağımsız bir GitHub kontrolü (+ gerekiyorsa indirme) yapar; sıralı
+    //    beklemek yerine eşzamanlı koştuğumuzda açılışta "hazır olma" süresi
+    //    servislerin toplamı değil, EN YAVAŞ servis kadar olur. İndirmeler ayrı
+    //    dizinlere yazar ve Java servislerinin ensure_latest yolu manager kilidine
+    //    dokunmaz (yalnız native güncellemesi kısa süreli kilitler), bu yüzden
+    //    eşzamanlı çalışmak güvenlidir.
+    let ensure_futures = config::ALL_SERVICES.map(|d| d.kind).map(|kind| {
+        let app = app.clone();
+        async move {
+            match ensure_latest(&app, kind).await {
+                // Başarılı (indirildi veya zaten güncel) → varsa eski hatayı temizle.
+                Ok(_) => set_setup_error(&app, kind, None).await,
+                Err(err) => {
+                    tracing::warn!(
+                        service = kind.as_str(),
+                        error = %err,
+                        "otomatik kurulum/güncelleme atlandı"
+                    );
+                    // Hatayı görünür kıl: kullanıcı neden inmediğini görsün.
+                    set_setup_error(&app, kind, Some(err.to_string())).await;
+                }
             }
         }
-    }
+    });
+    futures_util::future::join_all(ensure_futures).await;
 
+    // 2) Servisleri başlat. start_java/start_native süreci spawn edip HEMEN
+    //    döndüğünden bu döngü hızlıdır; gerçek boot çocuk süreçlerde zaten
+    //    EŞZAMANLI ilerler. Port seçimi (find_free_port) yarışlarını önlemek için
+    //    başlatma sıralı bırakıldı (spawn anlık olduğu için maliyeti yok).
     for kind in config::ALL_SERVICES.map(|d| d.kind) {
         if let Err(err) = auto_start(&app, kind).await {
             tracing::warn!(
@@ -679,6 +755,17 @@ pub async fn auto_setup(app: AppHandle) {
 /// Dönüş: indirme/güncelleme yapıldıysa `true`.
 async fn ensure_latest(app: &AppHandle, kind: ServiceKind) -> AppResult<EnsureLatestOutcome> {
     let descriptor = descriptor_for(kind);
+
+    // GÖMÜLÜ servis: sürüm desktop uygulamasına kilitlidir. GitHub'a/ağa HİÇ
+    // dokunmadan "güncel" kabul edilir (kurumsal proxy/çevrimdışı ortamda da
+    // sorunsuz). Güncelleme ancak yeni bir desktop sürümüyle (yeni build) gelir.
+    if resolve_bundled_artifact(app, &descriptor).is_some() {
+        return Ok(EnsureLatestOutcome {
+            updated: false,
+            start_after_update: false,
+        });
+    }
+
     let data_dir = app_data_dir(app)?;
     let release = github::latest_release(&descriptor).await?;
 
