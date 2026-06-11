@@ -80,6 +80,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm fetch-services
 
+      # macOS notarization, .app içindeki jar'ların İÇİNDEKİ Mach-O native'leri de
+      # tarar. `agent` jar'ı ad-hoc imzalı bir libpkcs11wrapper.jnilib taşır;
+      # imzalanmazsa notarization patlar (v0.1.11 mac build'i bu yüzden çöktü).
+      # Bu adım gömülü jar'ların içindeki native'leri Developer ID + timestamp ile
+      # YENİDEN imzalar ve nested jar'ları Spring Boot'un beklediği STORED biçimde
+      # geri gömer. Yalnız macOS'ta ve imza secret'ı tanımlıysa iş yapar.
+      - name: Gömülü jar içi native'leri imzala (macOS notarization)
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: bash scripts/sign-bundled-natives.sh
+
       - name: Build + imzalı updater artefaktları + Release
         uses: tauri-apps/tauri-action@v0
         env:
