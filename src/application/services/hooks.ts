@@ -101,6 +101,34 @@ export function useStopService() {
   });
 }
 
+export function useRestartService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (kind: ServiceKind) => container.services.restartService(kind),
+    onSuccess: () => qc.invalidateQueries({ queryKey: serviceKeys.list }),
+  });
+}
+
+/**
+ * Tüm servisleri işletim sistemine kayıtlı (login'de otomatik kalkan) birimler
+ * olarak kurar veya kayıtlarını kaldırır.
+ */
+export function useInstallOsServices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => container.services.installOsServices(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: serviceKeys.list }),
+  });
+}
+
+export function useUninstallOsServices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => container.services.uninstallOsServices(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: serviceKeys.list }),
+  });
+}
+
 export function useInstallService() {
   const qc = useQueryClient();
   return useMutation({

@@ -23,6 +23,11 @@ export interface ServiceGateway {
   /** Servisi durdurur. */
   stopService(kind: ServiceKind): Promise<void>;
   /**
+   * Servisi yeniden başlatır. OS-servisi olarak kuruluysa OS API'siyle (düzgün
+   * durdur→başlat); değilse yönetilen child süreci yeniden başlatır.
+   */
+  restartService(kind: ServiceKind): Promise<void>;
+  /**
    * Tüm yönetilen servisleri durdurur ve process handle'larının serbest
    * kalmasını bekler. Uygulama güncellemesinden ÖNCE çağrılır; aksi hâlde
    * çalışan Java süreçleri `jre/bin/java.dll`'i kilitleyip Windows kurulumunu
@@ -40,4 +45,14 @@ export interface ServiceGateway {
   updateService(kind: ServiceKind): Promise<boolean>;
   /** Servis başlatma sürecinin stdout/stderr log çıktısını döner. */
   readLaunchLogs(kind: ServiceKind, lines?: number): Promise<string>;
+  /**
+   * Tüm servisleri işletim sistemine kayıtlı (login'de otomatik kalkan, sürekli
+   * sıcak) birimler olarak kurar. Mevcut child süreçleri durdurup OS-servisine
+   * devreder.
+   */
+  installOsServices(): Promise<void>;
+  /** OS-servisi kayıtlarını kaldırır (uygulama yeniden child-process'e döner). */
+  uninstallOsServices(): Promise<void>;
+  /** Hangi servislerin OS-servisi olarak kurulu olduğunu döner. */
+  osServicesInstalled(): Promise<ServiceKind[]>;
 }

@@ -9,6 +9,8 @@ import {
   ExternalLink,
   FileText,
   Play,
+  RotateCw,
+  ServerCog,
   ShieldCheck,
   Square,
   Stamp,
@@ -20,6 +22,7 @@ import type { ServiceSnapshot } from "@/domain/services/types";
 import {
   useInstallService,
   useLatestRelease,
+  useRestartService,
   useStartService,
   useStopService,
   useUpdateService,
@@ -55,6 +58,7 @@ export function ServiceRow({ service, progress }: ServiceRowProps) {
   const meta = SERVICE_META[service.kind];
   const start = useStartService();
   const stop = useStopService();
+  const restart = useRestartService();
   const install = useInstallService();
   const update = useUpdateService();
   const release = useLatestRelease(service.kind);
@@ -66,7 +70,11 @@ export function ServiceRow({ service, progress }: ServiceRowProps) {
 
   const isInstalled = service.state !== "not-installed";
   const isRunning = service.state === "running" || service.state === "starting";
-  const isExternal = service.externallyManaged === true;
+  // OS-servisi (LaunchAgent/systemd/Scheduled Task): externallyManaged olsa bile
+  // uygulamadan OS API'siyle kontrol edilebilir. Bu yüzden "dışarıdan yönetiliyor"
+  // sadece OS-servisi OLMAYAN dış süreçler için geçerlidir.
+  const isOsManaged = service.osManaged === true;
+  const isExternal = service.externallyManaged === true && !isOsManaged;
 
   const latestTag = release.data?.tag;
   const updateAvailable =
@@ -110,6 +118,13 @@ export function ServiceRow({ service, progress }: ServiceRowProps) {
   const handleStop = () => {
     stop.mutate(service.kind, {
       onError: (e) => toast.error(`Durdurulamadı: ${errorMessage(e)}`),
+    });
+  };
+
+  const handleRestart = () => {
+    restart.mutate(service.kind, {
+      onSuccess: () => toast.success(`${meta.shortName} yeniden başlatıldı`),
+      onError: (e) => toast.error(`Yeniden başlatılamadı: ${errorMessage(e)}`),
     });
   };
 
@@ -184,6 +199,57 @@ export function ServiceRow({ service, progress }: ServiceRowProps) {
                     Uygulama dışında başlatıldı; durdurma uygulamadan yönetilemez.
                   </TooltipContent>
                 </Tooltip>
+                {docsButton}
+              </>
+            ) : isOsManaged ? (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center gap-1 rounded-sm bg-brand-soft px-1.5 py-px text-[10px] font-medium text-brand-hover">
+                      <ServerCog className="h-3 w-3" />
+                      OS
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    İşletim sistemi servisi — login'de otomatik başlar, sürekli sıcak kalır.
+                  </TooltipContent>
+                </Tooltip>
+                {isRunning ? (
+                  <>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon-sm"
+                          onClick={handleRestart}
+                          disabled={restart.isPending}
+                          aria-label="Yeniden başlat"
+                        >
+                          <RotateCw />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Yeniden başlat</TooltipContent>
+                    </Tooltip>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleStop}
+                      disabled={stop.isPending}
+                    >
+                      <Square />
+                      Durdur
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={handleStart}
+                    disabled={start.isPending}
+                  >
+                    <Play />
+                    Başlat
+                  </Button>
+                )}
                 {docsButton}
               </>
             ) : !isInstalled ? (

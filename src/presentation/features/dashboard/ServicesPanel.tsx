@@ -3,9 +3,16 @@
  * Her satır bir servis: durum, port, sürüm ve işlem butonu.
  */
 
-import { Boxes } from "lucide-react";
+import { Boxes, ServerCog } from "lucide-react";
+import { toast } from "sonner";
 import type { ServiceSnapshot } from "@/domain/services/types";
 import type { ProgressMap } from "@/application/services/useDownloadProgress";
+import {
+  useInstallOsServices,
+  useUninstallOsServices,
+} from "@/application/services/hooks";
+import { errorMessage } from "@/shared/lib/errors";
+import { Button } from "@/presentation/components/ui/button";
 import { Card } from "@/presentation/components/ui/card";
 import {
   Table,
@@ -15,6 +22,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/presentation/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/presentation/components/ui/tooltip";
 import { Skeleton } from "@/presentation/components/ui/skeleton";
 import { ServiceRow } from "@/presentation/features/dashboard/ServiceRow";
 
@@ -28,6 +40,29 @@ const HEAD_CLASS =
   "h-10 px-4 text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-dim";
 
 export function ServicesPanel({ services, isLoading, progress }: ServicesPanelProps) {
+  const installOs = useInstallOsServices();
+  const uninstallOs = useUninstallOsServices();
+  const osBusy = installOs.isPending || uninstallOs.isPending;
+
+  // Servisler henüz yüklenmediyse butonu gösterme; en az biri OS-servisi ise
+  // "kaldır", hiçbiri değilse "işletim sistemine kur" eylemini sun.
+  const anyOsManaged = (services ?? []).some((s) => s.osManaged);
+
+  const handleInstallOs = () => {
+    installOs.mutate(undefined, {
+      onSuccess: () =>
+        toast.success("Servisler işletim sistemine kuruldu (login'de otomatik kalkar)"),
+      onError: (e) => toast.error(`OS-servis kurulumu başarısız: ${errorMessage(e)}`),
+    });
+  };
+
+  const handleUninstallOs = () => {
+    uninstallOs.mutate(undefined, {
+      onSuccess: () => toast.success("OS-servis kayıtları kaldırıldı"),
+      onError: (e) => toast.error(`Kaldırma başarısız: ${errorMessage(e)}`),
+    });
+  };
+
   return (
     <Card className="gap-0 overflow-hidden py-0">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
@@ -35,6 +70,31 @@ export function ServicesPanel({ services, isLoading, progress }: ServicesPanelPr
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-dim">
           Yönetilen Servisler
         </h2>
+        {services && services.length > 0 ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto"
+                onClick={anyOsManaged ? handleUninstallOs : handleInstallOs}
+                disabled={osBusy}
+              >
+                <ServerCog />
+                {osBusy
+                  ? "Uygulanıyor…"
+                  : anyOsManaged
+                    ? "OS-servisini kaldır"
+                    : "İşletim sistemine kur"}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {anyOsManaged
+                ? "Servisleri OS kaydından çıkar; uygulama yeniden kendi başlatır."
+                : "Servisleri login'de otomatik kalkan, sürekli sıcak OS-servislerine dönüştür."}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
       </div>
 
       <Table>

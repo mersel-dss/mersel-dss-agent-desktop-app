@@ -63,6 +63,10 @@ pub struct ServiceSnapshot {
     /// başlatılmış ve portu yanıt veriyor. Bu durumda uygulama süreci
     /// yönetemez (durduramaz), yalnızca durumu raporlar.
     pub externally_managed: bool,
+    /// Servis işletim sistemine kayıtlı (LaunchAgent / systemd --user / Scheduled
+    /// Task) olarak yönetiliyor. Bu durumda uygulama servisi OS API'siyle
+    /// başlat/durdur/yeniden başlat edebilir (externally_managed olsa bile).
+    pub os_managed: bool,
     /// Son hata mesajı (varsa).
     pub last_error: Option<String>,
 }

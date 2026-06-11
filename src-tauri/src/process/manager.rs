@@ -274,14 +274,14 @@ impl ServiceManager {
 ///   klasik "hızlı başlat" bayrağı).
 /// - `-Xshare:auto`: Class Data Sharing arşivi varsa kullan, yoksa sessizce
 ///   atla → sınıf yükleme hızlanır, hiçbir koşulda başlatmayı engellemez.
-fn fast_start_jvm_args() -> &'static [&'static str] {
+pub(crate) fn fast_start_jvm_args() -> &'static [&'static str] {
     &["-XX:TieredStopAtLevel=1", "-Xshare:auto"]
 }
 
 /// Bir servisin jar'dan SONRA eklenecek Spring Boot uygulama argümanlarını döner.
 /// Bunlar JVM seçeneği değil program argümanı olduğundan `-jar <jar>`'dan sonra
 /// gelmek zorundadır; aksi hâlde JVM "Unrecognized option" verip çöker.
-fn application_args(kind: ServiceKind) -> &'static [&'static str] {
+pub(crate) fn application_args(kind: ServiceKind) -> &'static [&'static str] {
     match kind {
         // İmza ajanını tamamen sessiz (headless) çalıştır: splash + tray + pencere
         // kapalı. Verifier/XSLT bu bayrakları kullanmadığından boş döner.
@@ -300,35 +300,36 @@ fn application_args(kind: ServiceKind) -> &'static [&'static str] {
 /// tray + pencere) kapatır; PCSC/PKCS#11 kart erişimi AWT kullanmadığından bundan
 /// etkilenmez. Spring uygulama argümanları için `application_args`'a bakın.
 fn configure_silent_env(command: &mut Command, kind: ServiceKind, assets_dir: Option<&Path>) {
-    // UI bayrakları yalnız agent'ta anlamlı (verifier'da sessizce yok sayılır).
-    if kind == ServiceKind::Agent {
-        command
-            // Spring kalkmadan önceki splash yalnızca env var okur.
-            .env("MERSEL_AGENT_UI", "false")
-            .env("MERSEL_AGENT_UI_SPLASH", "false");
+    for (key, value) in silent_env_vars(kind, assets_dir) {
+        command.env(key, value);
     }
+}
 
-    // XSLT servisi hem HTML önizleme hem şema (XSD) + şematron doğrulaması yapar.
-    // Doğrulama için GİB resmi paketleri (e-Fatura/UBL-TR/e-Arşiv/e-Defter)
-    // gerekir; bu asset'leri kalıcı bir dış dizinde tutarız (external-path =
-    // sync target-path), böylece bir kez indirilince sonraki açılışlarda
-    // diskten okunur.
-    //
-    // Servisin tüm yapılandırması env ile geçilebilir (bkz. application.yml).
-    // Sync'i etkinleştirip "açılışta otomatik sync"i de açıyoruz: servisin kendi
-    // GibAutoSyncStartupListener'ı ApplicationReady'de asset dizini boşsa GİB
-    // paketlerini arka planda (virtual thread) indirir ve asset registry'yi
-    // reload eder. Böylece bizim ek bir admin/token çağrımıza gerek kalmaz;
-    // dizin doluysa (sonraki açılışlar) otomatik atlanır.
+/// Bir Java servisini sessiz (headless) çalıştırmak için gereken ORTAM
+/// DEĞİŞKENLERİNİ döner. Hem child-process başlatma (`configure_silent_env`) hem
+/// de OS-servis kaydı (plist/unit/task) aynı listeyi kullanır → davranış tutarlı.
+///
+/// - Agent: splash/tray/pencere env bayrakları (Spring kalkmadan okunur).
+/// - XSLT: GİB doğrulama asset'lerini kalıcı dış dizinde tutup açılışta otomatik
+///   sync eden env'ler (external-path = sync target-path).
+pub(crate) fn silent_env_vars(
+    kind: ServiceKind,
+    assets_dir: Option<&Path>,
+) -> Vec<(String, String)> {
+    let mut env: Vec<(String, String)> = Vec::new();
+    if kind == ServiceKind::Agent {
+        env.push(("MERSEL_AGENT_UI".into(), "false".into()));
+        env.push(("MERSEL_AGENT_UI_SPLASH".into(), "false".into()));
+    }
     if kind == ServiceKind::Xslt {
         if let Some(dir) = assets_dir {
             let dir = dir.display().to_string();
-            command
-                .env("XSLT_ASSETS_EXTERNAL_PATH", &dir)
-                .env("XSLT_ASSETS_WATCH_ENABLED", "true")
-                .env("VALIDATION_ASSETS_GIB_SYNC_ENABLED", "true")
-                .env("VALIDATION_ASSETS_GIB_AUTO_SYNC", "true")
-                .env("VALIDATION_ASSETS_GIB_SYNC_PATH", &dir);
+            env.push(("XSLT_ASSETS_EXTERNAL_PATH".into(), dir.clone()));
+            env.push(("XSLT_ASSETS_WATCH_ENABLED".into(), "true".into()));
+            env.push(("VALIDATION_ASSETS_GIB_SYNC_ENABLED".into(), "true".into()));
+            env.push(("VALIDATION_ASSETS_GIB_AUTO_SYNC".into(), "true".into()));
+            env.push(("VALIDATION_ASSETS_GIB_SYNC_PATH".into(), dir));
         }
     }
+    env
 }

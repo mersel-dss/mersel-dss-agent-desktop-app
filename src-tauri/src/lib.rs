@@ -10,6 +10,7 @@ mod http;
 mod java;
 mod models;
 mod net;
+mod os_service;
 mod process;
 mod state;
 
@@ -65,10 +66,14 @@ pub fn run() {
             commands::services::list_services,
             commands::services::start_service,
             commands::services::stop_service,
+            commands::services::restart_service,
             commands::services::stop_all_services,
             commands::services::latest_release,
             commands::services::install_service,
             commands::services::update_service,
+            commands::services::install_os_services,
+            commands::services::uninstall_os_services,
+            commands::services::os_services_installed,
             commands::services::read_service_launch_logs,
             commands::signing::list_smartcards,
             commands::signing::list_certificates,

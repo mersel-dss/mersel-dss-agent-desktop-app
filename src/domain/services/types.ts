@@ -25,6 +25,12 @@ export interface ServiceSnapshot {
   uiVisible: boolean;
   /** Uygulama dışında (örn. terminalden) başlatıldı; uygulama durduramaz. */
   externallyManaged: boolean;
+  /**
+   * Servis işletim sistemine kayıtlı (LaunchAgent / systemd --user / Scheduled
+   * Task) olarak yönetiliyor. `externallyManaged` olsa bile uygulama bu servisi
+   * OS API'siyle başlat/durdur/yeniden başlat edebilir.
+   */
+  osManaged: boolean;
   lastError: string | null;
 }
 

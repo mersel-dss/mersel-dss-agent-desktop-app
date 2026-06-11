@@ -33,6 +33,10 @@ export class TauriServiceGateway implements ServiceGateway {
     return call<void>("stop_service", { kind });
   }
 
+  restartService(kind: ServiceKind): Promise<void> {
+    return call<void>("restart_service", { kind });
+  }
+
   stopAllServices(): Promise<void> {
     return call<void>("stop_all_services");
   }
@@ -54,5 +58,17 @@ export class TauriServiceGateway implements ServiceGateway {
       kind,
       lines: lines ?? 500,
     });
+  }
+
+  installOsServices(): Promise<void> {
+    return call<void>("install_os_services");
+  }
+
+  uninstallOsServices(): Promise<void> {
+    return call<void>("uninstall_os_services");
+  }
+
+  osServicesInstalled(): Promise<ServiceKind[]> {
+    return call<ServiceKind[]>("os_services_installed");
   }
 }

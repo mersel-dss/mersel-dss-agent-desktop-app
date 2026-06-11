@@ -104,6 +104,7 @@ pub async fn list_services(
             installed_tag,
             pid,
             externally_managed,
+            os_managed: crate::os_service::is_installed(descriptor.kind),
             // Hatayı yalnızca kurulu olmayan servislerde göster (kurulu/çalışan
             // servis için eski bir hata mesajı asılı kalmasın).
             last_error: if matches!(state_value, ServiceState::NotInstalled) {
@@ -181,6 +182,40 @@ fn resolve_effective_artifact(app: &AppHandle, descriptor: &ServiceDescriptor) -
     }
     let data_dir = app_data_dir(app).ok()?;
     resolve_installed_artifact(&data_dir, descriptor)
+}
+
+/// Bir servisin ŞU AN geçerli artifact sürüm etiketini döner: ÖNCE gömülü kilidi
+/// (`services.lock.json` — desktop'a pinli), yoksa indirilmiş meta. OS-servisinin
+/// "hangi sürümü çalıştırması gerektiği"ni belirlemek için kullanılır.
+fn current_artifact_tag(app: &AppHandle, kind: ServiceKind) -> Option<String> {
+    read_bundled_lock_tag(app, kind).or_else(|| {
+        app_data_dir(app)
+            .ok()
+            .and_then(|d| version::read(&d, kind))
+            .map(|m| m.tag)
+    })
+}
+
+/// OS-servisinin HÂLİHAZIRDA hangi sürümle kurulduğunu tutan işaretçi dosyası.
+/// Desktop app güncellenince gömülü sürüm değişir; bu işaretçiyle karşılaştırıp
+/// yalnız gerçekten değiştiğinde OS-servisini yeniler (gereksiz restart olmaz).
+fn os_tag_marker_path(data_dir: &Path, kind: ServiceKind) -> PathBuf {
+    config::jars_dir(data_dir, kind).join("os-service.tag")
+}
+
+fn read_os_service_tag(data_dir: &Path, kind: ServiceKind) -> Option<String> {
+    std::fs::read_to_string(os_tag_marker_path(data_dir, kind))
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn write_os_service_tag(data_dir: &Path, kind: ServiceKind, tag: &str) {
+    let path = os_tag_marker_path(data_dir, kind);
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(path, tag);
 }
 
 /// Gömülü servis sürüm kilidinden (`services.lock.json`) ilgili servisin
@@ -312,17 +347,136 @@ async fn launch_service(app: &AppHandle, kind: ServiceKind) -> AppResult<u32> {
     }
 }
 
-/// Bir servisi sessiz (headless) modda, ilk boş porttan başlatır.
+/// Bir servisin OS-servis (LaunchAgent / systemd --user / Scheduled Task) olarak
+/// kaydı için gereken TAM başlatma tarifi. Child-process başlatmadan farkı: port
+/// SABİT default porttur (daemon'a runtime'da port verilemez) ve tüm argüman/env
+/// önceden somutlaştırılır.
+pub(crate) struct LaunchSpec {
+    pub program: String,
+    pub args: Vec<String>,
+    pub envs: Vec<(String, String)>,
+    pub work_dir: PathBuf,
+    pub port: u16,
+}
+
+/// Bir servis için OS-servis kaydına uygun, sabit-portlu başlatma tarifi üretir.
+/// Java çalıştırılabilirini + jar'ı (gömülü/indirilmiş) ve native exe'yi mevcut
+/// çözümleyicilerle bulur; böylece OS-servis ile child-process aynı komutu kullanır.
+pub(crate) async fn build_launch_spec(app: &AppHandle, kind: ServiceKind) -> AppResult<LaunchSpec> {
+    let descriptor = descriptor_for(kind);
+    let data_dir = app_data_dir(app)?;
+    let port = descriptor.default_port;
+
+    match descriptor.runtime {
+        ServiceRuntime::Java { .. } => {
+            let (java_exe, jar_path) = resolve_java_launch(app, kind).await?;
+
+            let assets_dir = if kind == ServiceKind::Xslt {
+                let dir = config::xslt_assets_dir(&data_dir);
+                let _ = tokio::fs::create_dir_all(&dir).await;
+                Some(dir)
+            } else {
+                None
+            };
+
+            let work_dir = config::jars_dir(&data_dir, kind);
+            let _ = tokio::fs::create_dir_all(&work_dir).await;
+
+            let mut args: Vec<String> = vec!["-Djava.awt.headless=true".to_string()];
+            args.extend(
+                crate::process::manager::fast_start_jvm_args()
+                    .iter()
+                    .map(|s| s.to_string()),
+            );
+            args.push("-jar".to_string());
+            args.push(jar_path.display().to_string());
+            args.push(format!("--server.port={port}"));
+            args.push("--server.address=127.0.0.1".to_string());
+            args.extend(
+                crate::process::manager::application_args(kind)
+                    .iter()
+                    .map(|s| s.to_string()),
+            );
+
+            let envs = crate::process::manager::silent_env_vars(kind, assets_dir.as_deref());
+
+            Ok(LaunchSpec {
+                program: java_exe,
+                args,
+                envs,
+                work_dir,
+                port,
+            })
+        }
+        ServiceRuntime::NativePackage { .. } | ServiceRuntime::NativeSingleFile { .. } => {
+            let exe = resolve_native_launch(app, kind)?;
+            let work_dir = exe
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| config::jars_dir(&data_dir, kind));
+
+            let mut envs = vec![(
+                "ASPNETCORE_URLS".to_string(),
+                format!("http://127.0.0.1:{port}"),
+            )];
+            let browsers = work_dir.join("ms-playwright");
+            if browsers.exists() {
+                envs.push((
+                    "PLAYWRIGHT_BROWSERS_PATH".to_string(),
+                    browsers.display().to_string(),
+                ));
+            }
+
+            Ok(LaunchSpec {
+                program: exe.display().to_string(),
+                args: Vec::new(),
+                envs,
+                work_dir,
+                port,
+            })
+        }
+    }
+}
+
+/// Bir servisi başlatır. OS-servisi olarak kuruluysa OS API'siyle başlatılır
+/// (pid izlenmediğinden 0 döner); değilse child-process olarak ilk boş porttan.
 #[tauri::command]
 pub async fn start_service(app: AppHandle, kind: ServiceKind) -> AppResult<u32> {
+    if crate::os_service::is_installed(kind) {
+        crate::os_service::start(kind)?;
+        return Ok(0);
+    }
     launch_service(&app, kind).await
 }
 
-/// Bir servisi durdurur.
+/// Bir servisi durdurur. OS-servisi olarak kuruluysa OS API'siyle (PID kill değil
+/// — Windows'ta görev düzgün sonlandırılır); değilse yönetilen child süreci durdurur.
 #[tauri::command]
 pub async fn stop_service(state: State<'_, AppState>, kind: ServiceKind) -> AppResult<()> {
+    if crate::os_service::is_installed(kind) {
+        return crate::os_service::stop(kind);
+    }
     let mut manager = state.manager.lock().await;
     manager.stop(kind)
+}
+
+/// Bir servisi yeniden başlatır (uygulama içi kontrol). OS-servisi olarak
+/// kuruluysa OS API'siyle restart; değilse child süreci durdurup yeniden başlatır.
+#[tauri::command]
+pub async fn restart_service(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    kind: ServiceKind,
+) -> AppResult<()> {
+    if crate::os_service::is_installed(kind) {
+        return crate::os_service::restart(kind);
+    }
+    {
+        let mut manager = state.manager.lock().await;
+        manager.stop(kind)?;
+    }
+    launch_service(&app, kind).await?;
+    Ok(())
 }
 
 /// Tüm yönetilen servisleri durdurur ve process handle'larının (özellikle
@@ -343,6 +497,77 @@ pub async fn stop_all_services(state: State<'_, AppState>) -> AppResult<()> {
     // için kısa bir tampon bırakıyoruz.
     tokio::time::sleep(Duration::from_millis(800)).await;
     Ok(())
+}
+
+/// Tüm servisleri İŞLETİM SİSTEMİNE kayıtlı, login'de otomatik kalkan birimler
+/// olarak kurar (macOS LaunchAgent / Linux systemd --user / Windows Scheduled
+/// Task). Böylece servisler arka planda sürekli sıcak kalır ve uygulama açıldığı
+/// an sabit default portta hazır olur. Admin/UAC gerektirmez (kullanıcı kapsamı).
+///
+/// Kurmadan önce uygulamanın kendi başlattığı child süreçler durdurulur ki
+/// OS-servisleri default portları çakışmasız alabilsin.
+#[tauri::command]
+pub async fn install_os_services(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<()> {
+    {
+        let mut manager = state.manager.lock().await;
+        manager.stop_all();
+    }
+    tokio::time::sleep(Duration::from_millis(400)).await;
+
+    let data_dir = app_data_dir(&app).ok();
+    let mut errors = Vec::new();
+    for kind in config::ALL_SERVICES.map(|d| d.kind) {
+        match build_launch_spec(&app, kind).await {
+            Ok(spec) => {
+                if let Err(e) = crate::os_service::install(kind, &spec) {
+                    errors.push(format!("{}: {e}", kind.as_str()));
+                } else if let (Some(dir), Some(tag)) =
+                    (data_dir.as_deref(), current_artifact_tag(&app, kind))
+                {
+                    // Sürüm işaretçisini yaz: sonraki açılışlarda desktop güncellenince
+                    // OS-servisi otomatik yeni sürüme senkronlansın.
+                    write_os_service_tag(dir, kind, &tag);
+                }
+            }
+            Err(e) => errors.push(format!("{}: {e}", kind.as_str())),
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(AppError::ServiceStart(errors.join("; ")))
+    }
+}
+
+/// Tüm servislerin OS-servis kaydını kaldırır (varsa durdurur). Kaldırma sonrası
+/// uygulama servisleri yeniden kendi child süreci olarak yönetebilir.
+#[tauri::command]
+pub async fn uninstall_os_services() -> AppResult<()> {
+    let mut errors = Vec::new();
+    for kind in config::ALL_SERVICES.map(|d| d.kind) {
+        if let Err(e) = crate::os_service::uninstall(kind) {
+            errors.push(format!("{}: {e}", kind.as_str()));
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(AppError::ServiceStart(errors.join("; ")))
+    }
+}
+
+/// OS-servisi olarak kurulu servislerin listesini döner (frontend bu duruma göre
+/// "Servis olarak kur / kaldır" düğmesini gösterir).
+#[tauri::command]
+pub async fn os_services_installed() -> AppResult<Vec<ServiceKind>> {
+    Ok(config::ALL_SERVICES
+        .map(|d| d.kind)
+        .into_iter()
+        .filter(|k| crate::os_service::is_installed(*k))
+        .collect())
 }
 
 /// İlgili servisin GitHub'daki en güncel release bilgisini döner.
@@ -730,16 +955,17 @@ pub async fn auto_setup(app: AppHandle) {
     });
     futures_util::future::join_all(ensure_futures).await;
 
-    // 2) Servisleri başlat. start_java/start_native süreci spawn edip HEMEN
-    //    döndüğünden bu döngü hızlıdır; gerçek boot çocuk süreçlerde zaten
-    //    EŞZAMANLI ilerler. Port seçimi (find_free_port) yarışlarını önlemek için
-    //    başlatma sıralı bırakıldı (spawn anlık olduğu için maliyeti yok).
+    // 2) Servisleri "aktif" hale getir. ÖNCELİK OS-SERVİSİ: ilk açılışta her servis
+    //    işletim sistemine (LaunchAgent / systemd --user / Scheduled Task) kaydedilir
+    //    ve sürekli sıcak kalır; sonraki açılışlarda zaten ayakta bulunur. OS kaydı
+    //    başarısızsa child-process'e düşülür (geriye dönük güvence). Sıralı bırakıldı
+    //    (her adım kısa: ya is_installed kontrolü ya da tek bir kayıt komutu).
     for kind in config::ALL_SERVICES.map(|d| d.kind) {
-        if let Err(err) = auto_start(&app, kind).await {
+        if let Err(err) = ensure_service_active(&app, kind).await {
             tracing::warn!(
                 service = kind.as_str(),
                 error = %err,
-                "otomatik başlatma atlandı"
+                "servis aktifleştirme atlandı"
             );
         }
     }
@@ -939,24 +1165,94 @@ pub async fn read_service_launch_logs(
     Ok(content)
 }
 
-/// Servisi otomatik başlatır. Dışarıdan (varsayılan portta) ya da bu uygulama
-/// tarafından zaten çalışıyorsa hiçbir şey yapmaz.
-async fn auto_start(app: &AppHandle, kind: ServiceKind) -> AppResult<()> {
+/// Bir servisi açılışta "aktif" hale getirir. Öncelik OS-servisidir:
+///
+/// 1. Default port zaten yanıt veriyorsa (dışarıdan veya önceki oturumdaki
+///    OS-servisinden) hiçbir şey yapma.
+/// 2. OS-servisi kuruluysa (LaunchAgent/systemd/Task) dokunma — OS onu yönetir ve
+///    sıcak tutar; kopya child SPAWN ETME.
+/// 3. Kurulu değilse OS-servisi olarak kurmayı dene (artifact mevcutsa). Kurulum
+///    servisi başlatır → bir daha kalkış maliyeti ödenmez.
+/// 4. OS kurulumu başarısızsa (artifact yok, izin yok vb.) child-process olarak
+///    başlat — uygulama yine çalışsın (geriye dönük güvence).
+async fn ensure_service_active(app: &AppHandle, kind: ServiceKind) -> AppResult<()> {
     let descriptor = descriptor_for(kind);
 
-    // Dışarıdan başlatılmış olabilir — varsayılan port yanıt veriyorsa dokunma.
+    // 1) OS-servisi zaten kurulu mu? Kuruluysa SÜRÜM SENKRONU + CANLILIK kontrolü.
+    if crate::os_service::is_installed(kind) {
+        if let Ok(data_dir) = app_data_dir(app) {
+            let want = current_artifact_tag(app, kind);
+            let have = read_os_service_tag(&data_dir, kind);
+
+            // Desktop app güncellendi → gömülü servis sürümü değişti. OS-servisini
+            // DÜZGÜNCE durdur (Windows'ta dosya kilidi serbest kalsın), launcher'ı
+            // yeni artifact'a repoint et (install üzerine yazar), yeniden başlat.
+            if want.is_some() && want != have {
+                if let Ok(spec) = build_launch_spec(app, kind).await {
+                    let _ = crate::os_service::stop(kind);
+                    tokio::time::sleep(Duration::from_millis(600)).await;
+                    match crate::os_service::install(kind, &spec) {
+                        Ok(()) => {
+                            let _ = crate::os_service::start(kind);
+                            if let Some(tag) = want.as_deref() {
+                                write_os_service_tag(&data_dir, kind, tag);
+                            }
+                            tracing::info!(
+                                service = kind.as_str(),
+                                tag = want.as_deref().unwrap_or("?"),
+                                "OS-servisi yeni sürüme güncellendi"
+                            );
+                            return Ok(());
+                        }
+                        Err(err) => tracing::warn!(
+                            service = kind.as_str(),
+                            error = %err,
+                            "OS-servis sürüm güncellemesi başarısız"
+                        ),
+                    }
+                }
+            }
+        }
+
+        // Sürüm aynı: kurulu ama henüz yanıt vermiyorsa (durdurulmuş/yeni login)
+        // başlatmayı dene — uygulama açıldığında hazır olsun.
+        if !http::is_reachable(descriptor.default_port).await {
+            let _ = crate::os_service::start(kind);
+        }
+        return Ok(());
+    }
+
+    // 2) Kurulu değil — default portta zaten çalışıyor mu? (dış/elle başlatılmış)
     if http::is_reachable(descriptor.default_port).await {
         return Ok(());
     }
 
-    {
-        let state = app.state::<AppState>();
-        let mut manager = state.manager.lock().await;
-        if manager.is_running(kind) {
-            return Ok(());
-        }
+    // 3) OS-servisi olarak kurmayı dene (kurulum servisi başlatır).
+    match build_launch_spec(app, kind).await {
+        Ok(spec) => match crate::os_service::install(kind, &spec) {
+            Ok(()) => {
+                if let (Ok(data_dir), Some(tag)) =
+                    (app_data_dir(app), current_artifact_tag(app, kind))
+                {
+                    write_os_service_tag(&data_dir, kind, &tag);
+                }
+                tracing::info!(service = kind.as_str(), "OS-servisi olarak kuruldu");
+                return Ok(());
+            }
+            Err(err) => tracing::warn!(
+                service = kind.as_str(),
+                error = %err,
+                "OS-servis kurulumu başarısız; child-process'e düşülüyor"
+            ),
+        },
+        Err(err) => tracing::warn!(
+            service = kind.as_str(),
+            error = %err,
+            "OS-servis tarifi üretilemedi; child-process'e düşülüyor"
+        ),
     }
 
+    // 4) Geriye dönük güvence: child-process olarak başlat.
     launch_service(app, kind).await?;
     Ok(())
 }
