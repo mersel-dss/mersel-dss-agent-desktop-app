@@ -16,6 +16,13 @@
  * servisi (Playwright/Chromium taşıdığı için ~yüzlerce MB) bilinçli olarak
  * gömülmez; gömülü artifact'ı bulunmadığından Rust tarafı onu runtime'da indirir.
  *
+ * macOS istisnası: Apple notarization, .app içindeki jar'ların İÇİNDEKİ Mach-O
+ * binary'leri de tarar ve hepsinin Developer ID ile imzalı + timestamp'li
+ * olmasını ister. `agent` jar'ı imzasız bir native taşır
+ * (libpkcs11wrapper.jnilib) → macOS'ta gömülürse notarization patlar. Bu yüzden
+ * macOS'ta `agent` GÖMÜLMEZ; runtime'da indirilir (sonra OS-servisi olarak sıcak
+ * kalır). `verifier`/`xslt` saf Java olduğundan her platformda gömülür.
+ *
  * Sürüm çözümü: ÖNCE statik CDN manifesti (api.github.com'a dokunmaz, rate-limit
  * yemez), erişilemezse GitHub API'ye düşülür (token varsa `GITHUB_TOKEN`).
  *
@@ -64,6 +71,13 @@ const SERVICES = [
     jarPrefix: "mersel-xslt-service",
   },
 ];
+
+/**
+ * macOS notarization (jar içi imzasız native) nedeniyle macOS'ta GÖMÜLMEYECEK
+ * servisler. Bu servisler macOS installer'ına girmez; runtime'da indirilir.
+ */
+const SKIP_ON_MACOS = new Set(["agent"]);
+const IS_MACOS = process.platform === "darwin";
 
 /** İsteğe bağlı GitHub token'ı (CI'da rate-limit'i 60→5000'e çıkarır). */
 function authHeaders() {
@@ -211,6 +225,12 @@ async function main() {
   const lock = { generatedAt: new Date().toISOString(), services: {} };
 
   for (const svc of SERVICES) {
+    if (IS_MACOS && SKIP_ON_MACOS.has(svc.kind)) {
+      console.log(
+        `⤳ ${svc.kind} macOS'ta gömülmüyor (notarization); runtime'da indirilecek`,
+      );
+      continue;
+    }
     await fetchOne(svc, lock);
   }
 
