@@ -28,6 +28,10 @@ src-tauri/resources/jre21/*
 src-tauri/resources/services/*
 !src-tauri/resources/services/.gitkeep
 
+# Build sırasında `pnpm fetch-winsw` ile indirilen Windows Service sarmalayıcı.
+# register.ps1 / unregister.ps1 commit'lenir; yalnız WinSW.exe ikilisi hariç tutulur.
+src-tauri/resources/win-service/WinSW.exe
+
 # Tauri updater imza anahtarları (GİZLİ — repoya commit'lenmemeli)
 src-tauri/.tauri/
 *.key

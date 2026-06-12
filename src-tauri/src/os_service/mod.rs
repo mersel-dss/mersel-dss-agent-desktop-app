@@ -4,11 +4,17 @@
 //! zaten sıcak ve sabit default portta hazır olur; uygulamanın mevcut "dışarıdan
 //! çalışıyor" tespiti (`is_reachable(default_port)`) onları otomatik kullanır.
 //!
-//! Platform mekanizmaları (hepsi KULLANICI kapsamı — admin/UAC gerekmez ve
-//! interaktif oturumda koştuğu için akıllı kart/PKCS#11 doğal görünür):
-//!   • macOS  → LaunchAgent  (`~/Library/LaunchAgents/<label>.plist`, `launchctl`)
-//!   • Linux  → systemd user (`~/.config/systemd/user/<name>.service`, `systemctl --user`)
-//!   • Windows→ Scheduled Task (`/SC ONLOGON`, mevcut kullanıcı, `schtasks`)
+//! Platform mekanizmaları:
+//!   • macOS  → LaunchAgent  (KULLANICI kapsamı; `~/Library/LaunchAgents/...`, `launchctl`)
+//!   • Linux  → systemd user (KULLANICI kapsamı; `~/.config/systemd/user/...`, `systemctl --user`)
+//!   • Windows→ GERÇEK Windows Service (WinSW ile, services.msc'de görünür, Session 0).
+//!             Bu uygulama TARAFINDAN DEĞİL, INSTALLER (NSIS, admin/UAC) tarafından
+//!             kaydedilir; uygulama yalnız algılar (`sc query`) ve best-effort
+//!             start/stop dener. Eski (v0.1.12) Scheduled Task'ları `cleanup_legacy`
+//!             temizler. Ayrıntı: `resources/win-service/register.ps1`.
+//!
+//! macOS/Linux interaktif/kullanıcı oturumunda koştuğu için akıllı kart/PKCS#11
+//! doğal görünür; Windows Service Session 0'da koşar (kart erişimi orada da çalışır).
 //!
 //! Ortam değişkenleri (XSLT asset sync, agent UI bayrakları, ASPNETCORE_URLS)
 //! ve çalışma dizini, tüm platformlarda servisin çağırdığı bir LAUNCHER SCRIPT'e
@@ -26,9 +32,25 @@ fn id(kind: ServiceKind) -> &'static str {
     kind.as_str()
 }
 
+/// `Command` üreticisi — Windows'ta GUI sürecinden konsol aracı (schtasks/sc/net)
+/// çağrılınca bir an siyah cmd penceresi flaşlamasın diye CREATE_NO_WINDOW ekler.
+fn command(program: &str) -> Command {
+    let cmd = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let mut cmd = cmd;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        return cmd;
+    }
+    #[cfg(not(windows))]
+    cmd
+}
+
 /// Tek bir komutu çalıştırır; çıkış kodu 0 değilse stderr ile hata döner.
 fn run(program: &str, args: &[&str]) -> AppResult<()> {
-    let output = Command::new(program)
+    let output = command(program)
         .args(args)
         .output()
         .map_err(|e| AppError::ServiceStart(format!("{program} çalıştırılamadı: {e}")))?;
@@ -51,7 +73,8 @@ fn sh_quote(s: &str) -> String {
 
 /// Servisin başlatma tarifini, env + cwd dahil, platforma uygun bir launcher
 /// script'ine yazar ve script yolunu döner. Script `spec.work_dir` (yazılabilir)
-/// içine konur.
+/// içine konur. (Windows'ta artık kullanılmaz — servisi installer kaydeder.)
+#[cfg_attr(windows, allow(dead_code))]
 fn write_launcher(spec: &LaunchSpec) -> AppResult<PathBuf> {
     std::fs::create_dir_all(&spec.work_dir)
         .map_err(|e| AppError::Io(e.to_string()))?;
@@ -252,60 +275,76 @@ mod imp {
 }
 
 // ──────────────────────────────── Windows ────────────────────────────────
+//
+// Windows'ta servisler GERÇEK Windows Service'leridir (services.msc'de görünür,
+// Session 0'da gizli koşar, çökerse OS yeniden başlatır) ve UYGULAMA TARAFINDAN
+// DEĞİL, INSTALLER (NSIS, admin/UAC) tarafından WinSW ile kaydedilir. Bu yüzden
+// `install`/`uninstall` uygulama içinden çağrılamaz; uygulama yalnızca servisi
+// algılar (`is_installed`) ve start/stop'u (mümkünse) dener. Servis kontrolü
+// admin gerektirdiğinden start/stop best-effort'tur; servis zaten otomatik
+// başlatılmaya ve çökünce yeniden kalkmaya yapılandırılmıştır.
 #[cfg(target_os = "windows")]
 mod imp {
     use super::*;
 
-    fn task_name(kind: ServiceKind) -> String {
-        // Ters eğik çizgi Task Scheduler'da klasör ayırıcıdır; düz isim kullanırız.
+    /// WinSW servis kimliği (installer ile aynı olmalı). services.msc'de bu adla
+    /// görünür: `MerselImzamatik-agent` vb.
+    pub(super) fn service_id(kind: ServiceKind) -> String {
         format!("MerselImzamatik-{}", id(kind))
     }
 
-    pub fn install(kind: ServiceKind, spec: &LaunchSpec) -> AppResult<()> {
-        let script = write_launcher(spec)?;
-        let name = task_name(kind);
-        let tr = format!("\"{}\"", script.display());
-        // ONLOGON: kullanıcı oturum açtığında, INTERAKTIF oturumda başlar (kart
-        // erişimi doğal). /RL LIMITED → yükseltilmemiş; /F → varsa üzerine yaz.
-        run(
-            "schtasks",
-            &[
-                "/Create", "/TN", &name, "/TR", &tr, "/SC", "ONLOGON", "/RL", "LIMITED", "/F",
-            ],
-        )?;
-        // Kayıttan hemen sonra bir kez başlat (login beklemeden sıcak gelsin).
-        let _ = run("schtasks", &["/Run", "/TN", &name]);
+    /// v0.1.12'nin otomatik kurduğu, görünür cmd penceresi flaşlatan eski
+    /// Scheduled Task adı.
+    fn legacy_task_name(kind: ServiceKind) -> String {
+        format!("MerselImzamatik-{}", id(kind))
+    }
+
+    pub fn install(_kind: ServiceKind, _spec: &LaunchSpec) -> AppResult<()> {
+        Err(AppError::Invalid(
+            "Windows'ta servisler kurulum sırasında (installer) kaydedilir; \
+             uygulama içinden kurulamaz."
+                .into(),
+        ))
+    }
+
+    pub fn uninstall(_kind: ServiceKind) -> AppResult<()> {
+        // Servis kaldırma installer'ın (uninstaller) işidir; uygulama dokunmaz.
         Ok(())
     }
 
-    pub fn uninstall(kind: ServiceKind) -> AppResult<()> {
-        let name = task_name(kind);
-        let _ = run("schtasks", &["/End", "/TN", &name]);
-        run("schtasks", &["/Delete", "/TN", &name, "/F"])
-    }
-
     pub fn is_installed(kind: ServiceKind) -> bool {
-        Command::new("schtasks")
-            .args(["/Query", "/TN", &task_name(kind)])
+        // `sc query <id>` servis varsa 0 döner; yoksa 1060.
+        command("sc")
+            .args(["query", &service_id(kind)])
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)
     }
 
     pub fn stop(kind: ServiceKind) -> AppResult<()> {
-        let _ = run("schtasks", &["/End", "/TN", &task_name(kind)]);
+        // Best-effort (admin gerektirir). Hata yutulur — installer servisi zaten
+        // otomatik yönetir.
+        let _ = run("net", &["stop", &service_id(kind)]);
         Ok(())
     }
 
     pub fn start(kind: ServiceKind) -> AppResult<()> {
-        run("schtasks", &["/Run", "/TN", &task_name(kind)])
+        let _ = run("net", &["start", &service_id(kind)]);
+        Ok(())
     }
 
     pub fn restart(kind: ServiceKind) -> AppResult<()> {
         let _ = stop(kind);
-        // Görev bitişinin yerleşmesi için kısa bekleme yerine doğrudan başlat;
-        // schtasks /Run zaten çalışan görevi tekrar tetiklemez, /End sonrası temiz.
-        start(kind)
+        let _ = start(kind);
+        Ok(())
+    }
+
+    /// Eski Scheduled Task'ı (varsa) durdurup siler — sessizce, hata yutularak.
+    pub fn cleanup_legacy(kind: ServiceKind) -> AppResult<()> {
+        let name = legacy_task_name(kind);
+        let _ = run("schtasks", &["/End", "/TN", &name]);
+        let _ = run("schtasks", &["/Delete", "/TN", &name, "/F"]);
+        Ok(())
     }
 }
 
@@ -362,4 +401,19 @@ pub fn start(kind: ServiceKind) -> AppResult<()> {
 /// OS-servisini durdurup yeniden başlatır (güncelleme sonrası kullanılır).
 pub fn restart(kind: ServiceKind) -> AppResult<()> {
     imp::restart(kind)
+}
+
+/// Windows'ta v0.1.12'nin otomatik kurduğu eski `MerselImzamatik-*` Scheduled
+/// Task'ını (görünür cmd flaşlatan) temizler. Diğer platformlarda no-op.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn cleanup_legacy(kind: ServiceKind) -> AppResult<()> {
+    #[cfg(windows)]
+    {
+        return imp::cleanup_legacy(kind);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = kind;
+        Ok(())
+    }
 }

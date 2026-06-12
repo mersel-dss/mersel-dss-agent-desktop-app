@@ -80,6 +80,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm fetch-services
 
+      # WinSW (Windows Service Wrapper) ikilisini göm. Yalnız Windows'ta gerekir:
+      # NSIS installer, gömülü JRE + jar'ı WinSW ile gerçek Windows Service'lerine
+      # sarmalar (services.msc'de görünür, Session 0'da gizli, otomatik başlar).
+      - name: WinSW ikilisini göm (Windows Service sarmalayıcı)
+        if: runner.os == 'Windows'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm fetch-winsw
+
       # macOS notarization, .app içindeki jar'ların İÇİNDEKİ Mach-O native'leri de
       # tarar. `agent` jar'ı ad-hoc imzalı bir libpkcs11wrapper.jnilib taşır;
       # imzalanmazsa notarization patlar (v0.1.11 mac build'i bu yüzden çöktü).

@@ -1,0 +1,3 @@
+Windows Service sarmalayıcı dizini. `WinSW.exe` build sırasında `pnpm fetch-winsw`
+ile indirilir (gitignore'da). register.ps1 / unregister.ps1 commit'lenir ve NSIS
+installer hook'larından (admin) çağrılır.

@@ -1178,7 +1178,25 @@ pub async fn read_service_launch_logs(
 async fn ensure_service_active(app: &AppHandle, kind: ServiceKind) -> AppResult<()> {
     let descriptor = descriptor_for(kind);
 
+    // Windows: OS-servis kaydı artık UYGULAMA tarafından (Scheduled Task) DEĞİL,
+    // INSTALLER tarafından gerçek bir Windows Service olarak yapılır. Bu yüzden
+    // uygulama açılışta hiçbir Scheduled Task kurmaz. Ayrıca v0.1.12'nin otomatik
+    // kurduğu, görünür cmd penceresi açıp flaşlayan eski `MerselImzamatik-*`
+    // task'larını TEMİZLER (güncellemede kendini iyileştirir). Servis Windows
+    // Service olarak (installer) ayaktaysa default port'ta yanıt verir ve aşağıdaki
+    // is_reachable onu otomatik kullanır; değilse sessiz child-process'e düşülür.
+    #[cfg(windows)]
+    {
+        let _ = crate::os_service::cleanup_legacy(kind);
+        if http::is_reachable(descriptor.default_port).await {
+            return Ok(());
+        }
+        return launch_service(app, kind).await.map(|_| ());
+    }
+
     // 1) OS-servisi zaten kurulu mu? Kuruluysa SÜRÜM SENKRONU + CANLILIK kontrolü.
+    #[cfg(not(windows))]
+    {
     if crate::os_service::is_installed(kind) {
         if let Ok(data_dir) = app_data_dir(app) {
             let want = current_artifact_tag(app, kind);
@@ -1255,4 +1273,5 @@ async fn ensure_service_active(app: &AppHandle, kind: ServiceKind) -> AppResult<
     // 4) Geriye dönük güvence: child-process olarak başlat.
     launch_service(app, kind).await?;
     Ok(())
+    }
 }

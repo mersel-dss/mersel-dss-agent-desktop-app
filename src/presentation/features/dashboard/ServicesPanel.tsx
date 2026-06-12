@@ -48,6 +48,13 @@ export function ServicesPanel({ services, isLoading, progress }: ServicesPanelPr
   // "kaldır", hiçbiri değilse "işletim sistemine kur" eylemini sun.
   const anyOsManaged = (services ?? []).some((s) => s.osManaged);
 
+  // Windows'ta gerçek Windows Service'leri INSTALLER (admin/UAC) kaydeder; uygulama
+  // içinden kurulamaz/kaldırılamaz. Bu yüzden global OS düğmesini Windows'ta gizle
+  // (macOS/Linux'ta kullanıcı kapsamı LaunchAgent/systemd uygulamadan yönetilir).
+  const isWindows =
+    typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
+  const showOsToggle = !isWindows;
+
   const handleInstallOs = () => {
     installOs.mutate(undefined, {
       onSuccess: () =>
@@ -70,7 +77,7 @@ export function ServicesPanel({ services, isLoading, progress }: ServicesPanelPr
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-dim">
           Yönetilen Servisler
         </h2>
-        {services && services.length > 0 ? (
+        {showOsToggle && services && services.length > 0 ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
