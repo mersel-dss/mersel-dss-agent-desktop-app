@@ -7,6 +7,25 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ## [Unreleased]
 
+### Düzeltildi
+
+- **Windows güncelleme "Error opening file for writing: …\\jre21\\bin\\extnet.dll"
+  hatası (regresyon) giderildi.** OS-seviyesi Windows Servislerine geçişle birlikte
+  servisler artık uygulamanın spawn ettiği child process'ler değil, bağımsız Windows
+  Service'leri; bu yüzden uygulamanın ön-güncelleme durdurması bunları kapatmıyor ve
+  çalışan `java.exe` gömülü JRE DLL'lerini kilitli tutuyordu. NSIS installer'a bir
+  **PREINSTALL** hook'u eklendi: dosyalar yazılmadan önce `net stop` (senkron) ile
+  tüm Mersel servisleri tamamen durdurulur, kilitler bırakılır. Hook installer'a
+  derlendiğinden bu hook'a sahip olmayan eski sürümden güncellemeyi de düzeltir.
+
+### Değiştirildi
+
+- **Genel Bakış servisleri tablo yerine kart ızgarasında.** Her servis; ikon, durum,
+  port/sürüm çipleri, üstte ince durum şeridi ve hover gölgesiyle modern bir kartta
+  gösterilir. Her karta "**ne için kullanılır**" odaklı sade bir açıklama eklendi.
+- **"Java Çalışma Zamanları" bölümü kaldırıldı.** Artık tek bir JRE (Java 21)
+  paketlendiğinden iki ayrı runtime göstermek yanıltıcıydı.
+
 ## [0.1.10] - 2026-06-09
 
 ### Eklendi

@@ -5,7 +5,6 @@
 import { useServices } from "@/application/services/hooks";
 import { useDownloadProgress } from "@/application/services/useDownloadProgress";
 import { DashboardHero } from "@/presentation/features/dashboard/DashboardHero";
-import { JavaStatusCard } from "@/presentation/features/dashboard/JavaStatusCard";
 import { ServiceSetupBanner } from "@/presentation/features/dashboard/ServiceSetupBanner";
 import { ServicesPanel } from "@/presentation/features/dashboard/ServicesPanel";
 import { ScrollPage } from "@/presentation/components/common/ScrollPage";
@@ -26,9 +25,7 @@ export function DashboardPage() {
       {/* İlk-kurulum durumu — servisler inerken/kurulamadığında görünür. */}
       <ServiceSetupBanner services={data} progress={progress} />
 
-      <JavaStatusCard />
-
-      {/* Yönetilen servisler — tek bir derli toplu grid içinde. */}
+      {/* Yönetilen servisler — kart ızgarası. */}
       <ServicesPanel services={data} isLoading={isLoading} progress={progress} />
     </ScrollPage>
   );

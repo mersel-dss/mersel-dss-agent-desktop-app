@@ -1,6 +1,7 @@
 /**
- * Yönetilen Java servislerini tek, derli toplu bir grid (tablo) içinde gösterir.
- * Her satır bir servis: durum, port, sürüm ve işlem butonu.
+ * Yönetilen servisleri responsive bir KART ızgarasında gösterir. Her kart bir
+ * servis: durum, port, sürüm ve işlemler. Üstte bölüm başlığı + (macOS/Linux'ta)
+ * topluca OS-servisine kur/kaldır eylemi.
  */
 
 import { Boxes, ServerCog } from "lucide-react";
@@ -15,20 +16,12 @@ import { errorMessage } from "@/shared/lib/errors";
 import { Button } from "@/presentation/components/ui/button";
 import { Card } from "@/presentation/components/ui/card";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/presentation/components/ui/table";
-import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/presentation/components/ui/tooltip";
 import { Skeleton } from "@/presentation/components/ui/skeleton";
-import { ServiceRow } from "@/presentation/features/dashboard/ServiceRow";
+import { ServiceCard } from "@/presentation/features/dashboard/ServiceCard";
 
 interface ServicesPanelProps {
   services: ServiceSnapshot[] | undefined;
@@ -36,21 +29,15 @@ interface ServicesPanelProps {
   progress: ProgressMap;
 }
 
-const HEAD_CLASS =
-  "h-10 px-4 text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-dim";
-
 export function ServicesPanel({ services, isLoading, progress }: ServicesPanelProps) {
   const installOs = useInstallOsServices();
   const uninstallOs = useUninstallOsServices();
   const osBusy = installOs.isPending || uninstallOs.isPending;
 
-  // Servisler henüz yüklenmediyse butonu gösterme; en az biri OS-servisi ise
-  // "kaldır", hiçbiri değilse "işletim sistemine kur" eylemini sun.
   const anyOsManaged = (services ?? []).some((s) => s.osManaged);
 
   // Windows'ta gerçek Windows Service'leri INSTALLER (admin/UAC) kaydeder; uygulama
-  // içinden kurulamaz/kaldırılamaz. Bu yüzden global OS düğmesini Windows'ta gizle
-  // (macOS/Linux'ta kullanıcı kapsamı LaunchAgent/systemd uygulamadan yönetilir).
+  // içinden kurulamaz. Bu yüzden global OS düğmesini Windows'ta gizle.
   const isWindows =
     typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
   const showOsToggle = !isWindows;
@@ -71,8 +58,9 @@ export function ServicesPanel({ services, isLoading, progress }: ServicesPanelPr
   };
 
   return (
-    <Card className="gap-0 overflow-hidden py-0">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+    <section className="space-y-3">
+      {/* Bölüm başlığı. */}
+      <div className="flex items-center gap-2">
         <Boxes className="h-3.5 w-3.5 text-fg-dim" />
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-dim">
           Yönetilen Servisler
@@ -104,38 +92,24 @@ export function ServicesPanel({ services, isLoading, progress }: ServicesPanelPr
         ) : null}
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            <TableHead className={HEAD_CLASS}>Servis</TableHead>
-            <TableHead className={HEAD_CLASS}>Durum</TableHead>
-            <TableHead className={HEAD_CLASS}>Port</TableHead>
-            <TableHead className={HEAD_CLASS}>Sürüm</TableHead>
-            <TableHead className={`${HEAD_CLASS} text-right`}>İşlem</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody className="[&_td]:px-4">
-          {isLoading ? (
-            [0, 1, 2, 3].map((i) => (
-              <TableRow key={i} className="hover:bg-transparent">
-                <TableCell colSpan={5} className="px-4 py-3">
-                  <Skeleton className="h-9 w-full" />
-                </TableCell>
-              </TableRow>
-            ))
-          ) : services && services.length > 0 ? (
-            services.map((service) => (
-              <ServiceRow key={service.kind} service={service} progress={progress} />
-            ))
-          ) : (
-            <TableRow className="hover:bg-transparent">
-              <TableCell colSpan={5} className="px-4 py-8 text-center text-sm text-fg-muted">
-                Henüz yönetilen servis yok.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </Card>
+      {/* Kart ızgarası — geniş ekranda 2 sütun. */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {isLoading ? (
+          [0, 1, 2, 3].map((i) => (
+            <Card key={i} className="p-4">
+              <Skeleton className="h-[104px] w-full" />
+            </Card>
+          ))
+        ) : services && services.length > 0 ? (
+          services.map((service) => (
+            <ServiceCard key={service.kind} service={service} progress={progress} />
+          ))
+        ) : (
+          <Card className="p-8 sm:col-span-2">
+            <p className="text-center text-sm text-fg-muted">Henüz yönetilen servis yok.</p>
+          </Card>
+        )}
+      </div>
+    </section>
   );
 }

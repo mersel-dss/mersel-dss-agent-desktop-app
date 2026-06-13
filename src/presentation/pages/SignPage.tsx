@@ -2,6 +2,7 @@
  * İmza sayfası: PAdES (PDF) ve XAdES (XML) sekmeleri.
  */
 
+import type { ReactNode } from "react";
 import {
   KeyRound,
   ShieldCheck,
@@ -11,8 +12,6 @@ import {
 } from "lucide-react";
 import { useService } from "@/application/services/hooks";
 import { useSettingsValue } from "@/application/settings/hooks";
-import { ScrollPage } from "@/presentation/components/common/ScrollPage";
-import { PageHeader } from "@/presentation/components/common/PageHeader";
 import { ServiceOfflineNotice } from "@/presentation/components/common/ServiceOfflineNotice";
 import { SectionHeading } from "@/presentation/components/common/SectionHeading";
 import { IconMedallion } from "@/presentation/components/common/IconMedallion";
@@ -79,65 +78,73 @@ function SignGuide() {
   );
 }
 
+/** İmza çalışma alanı: solda form kartı, sağda rehber (her sekme için ortak). */
+function SignWorkspace({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-6 px-4 pt-5 pb-1 lg:flex-row lg:items-start">
+      <Card className="min-w-0 flex-1 lg:max-w-2xl">
+        <CardContent className="pt-6">{children}</CardContent>
+      </Card>
+      <aside className="lg:sticky lg:top-0 lg:w-[340px] lg:shrink-0">
+        <SignGuide />
+      </aside>
+    </div>
+  );
+}
+
 export function SignPage() {
   const { isRunning } = useService("agent");
   const { signing } = useSettingsValue();
 
   if (!isRunning) {
     return (
-      <ScrollPage className="space-y-5">
-        <PageHeader
-          title="İmzala"
-          description="Mali mühür / e-imza kartınızla PDF ve XML belgelerini imzalayın."
-        />
+      <div className="page-enter flex h-full items-center justify-center px-5 py-5">
         <ServiceOfflineNotice
           title="İmza ajanı çalışmıyor"
           description="İmza atabilmek için önce Genel Bakış'tan imza ajanını başlatın."
         />
-      </ScrollPage>
+      </div>
     );
   }
 
   return (
-    <ScrollPage className="space-y-5">
-      <PageHeader
-        title="İmzala"
-        description="Mali mühür / e-imza kartınızla PDF ve XML belgelerini imzalayın."
-      />
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <Card className="min-w-0 flex-1 lg:max-w-2xl">
-          <CardContent className="pt-6">
-            <Tabs
-              key={`${signing.defaultMode}-${signing.xadesContentType}`}
-              defaultValue={signing.defaultMode}
-            >
-              <TabsList className="mb-6">
-                <TabsTrigger value="pades">
-                  <FileText className="h-4 w-4" />
-                  PDF (PAdES)
-                </TabsTrigger>
-                <TabsTrigger value="xades">
-                  <FileCode2 className="h-4 w-4" />
-                  XML (XAdES)
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="pades">
-                <SignForm mode="pades" />
-              </TabsContent>
-              <TabsContent value="xades">
-                <SignForm
-                  mode="xades"
-                  defaultContentType={signing.xadesContentType}
-                />
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-
-        <aside className="lg:sticky lg:top-0 lg:w-[340px] lg:shrink-0">
-          <SignGuide />
-        </aside>
-      </div>
-    </ScrollPage>
+    <div className="page-enter h-full px-5 py-5">
+      <Tabs
+        key={`${signing.defaultMode}-${signing.xadesContentType}`}
+        defaultValue={signing.defaultMode}
+        className="flex h-full min-h-0 flex-col gap-0"
+      >
+        <div className="flex shrink-0 flex-col gap-3 border-b border-border/60 px-4 py-3">
+          <div className="min-w-0">
+            <h1 className="text-[15px] font-semibold leading-tight tracking-tight">
+              İmzala
+            </h1>
+            <p className="truncate text-[11.5px] leading-tight text-fg-dim">
+              Mali mühür / e-imza kartınızla PDF ve XML belgelerini imzalayın
+            </p>
+          </div>
+          <TabsList className="h-8 w-fit">
+            <TabsTrigger value="pades" className="gap-1.5 px-3 text-[12.5px]">
+              <FileText className="h-3.5 w-3.5" />
+              PDF (PAdES)
+            </TabsTrigger>
+            <TabsTrigger value="xades" className="gap-1.5 px-3 text-[12.5px]">
+              <FileCode2 className="h-3.5 w-3.5" />
+              XML (XAdES)
+            </TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value="pades" className="min-h-0 flex-1 overflow-y-auto">
+          <SignWorkspace>
+            <SignForm mode="pades" />
+          </SignWorkspace>
+        </TabsContent>
+        <TabsContent value="xades" className="min-h-0 flex-1 overflow-y-auto">
+          <SignWorkspace>
+            <SignForm mode="xades" defaultContentType={signing.xadesContentType} />
+          </SignWorkspace>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
