@@ -17,9 +17,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS (Apple Silicon) — native arm64. Java 8 için Adoptium aarch64
-          # bulunmadığından native arm64 Azul Zulu JRE 8 gömülür (Rosetta yok);
-          # Java 21 için Adoptium aarch64 kullanılır.
+          # macOS (Apple Silicon) — native arm64. Tüm servisler için tek JRE
+          # gömülür: Adoptium Temurin JRE 21 (native aarch64).
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
           # NOT: macOS Intel (macos-13) bilinçli olarak kaldırıldı. GitHub'ın
@@ -68,7 +67,7 @@ jobs:
       - name: Bağımlılıkları kur
         run: pnpm install --frozen-lockfile
 
-      - name: Platforma özel JRE'leri göm (Java 8 + Java 21)
+      - name: Platforma özel JRE'yi göm (yalnız Java 21 — tüm servisler)
         run: pnpm fetch-jre
 
       # Java servislerinin (agent/verifier/xslt) EN GÜNCEL jar'larını installer'a

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Platforma özel Adoptium Temurin JRE'leri indirir ve `src-tauri/resources/`
- * altına NORMALİZE ederek yerleştirir. İki ayrı runtime paketlenir çünkü
- * servisler farklı Java sürümleri ister:
- *   • Java 8  → `src-tauri/resources/jre`    (imza/doğrulama; mali mühür/PKCS#11)
- *   • Java 21 → `src-tauri/resources/jre21`  (XSLT önizleme; Spring Boot 3.4 + Saxon)
+ * Platforma özel Adoptium Temurin JRE'sini indirir ve `src-tauri/resources/`
+ * altına NORMALİZE ederek yerleştirir. Artık TEK runtime paketlenir; tüm
+ * servisler bu sürümde çalışır:
+ *   • Java 21 → `src-tauri/resources/jre21`  (agent/verifier Spring Boot 2.7 +
+ *     xslt Spring Boot 3.4; imza/doğrulama/PKCS#11 dahil)
  *
  * Normalize sonrası tüm platformlarda yapı aynıdır:
  *   src-tauri/resources/<dest>/bin/java[.exe]
@@ -35,12 +35,12 @@ const PROJECT_ROOT = join(__dirname, "..");
 const RESOURCES_DIR = join(PROJECT_ROOT, "src-tauri", "resources");
 
 /**
- * Paketlenecek JRE'ler. Her biri Adoptium feature sürümü + hedef alt dizin.
- * Servis-başına minimum Java sürümüyle (config.rs `min_java_major`) tutarlı:
- *   8  → jre   (imza/doğrulama),  21 → jre21 (XSLT önizleme).
+ * Paketlenecek JRE'ler. Artık TEK runtime gömülüyor: **Java 21** (`jre21`).
+ * Tüm servisler (agent/verifier Spring Boot 2.7 + xslt Spring Boot 3) Java 21'de
+ * çalışır; agent/verifier kendi JAXB'lerini taşır, BouncyCastle jdk18on ve IAIK
+ * PKCS#11 (JNI) kullanır. Ayrı Java 8 paketi (~97MB) boyut için kaldırıldı.
  */
 const JRE_TARGETS = [
-  { version: "8", dir: "jre" },
   { version: "21", dir: "jre21" },
 ];
 

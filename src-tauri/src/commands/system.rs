@@ -12,7 +12,7 @@ use tauri::AppHandle;
 /// ardından `JAVA_HOME` / `PATH` üzerindeki Java'yı dener.
 #[tauri::command]
 pub async fn detect_java(app: AppHandle) -> JavaInfo {
-    let jre_dir = config::bundled_jre_dir(&app);
+    let jre_dir = config::bundled_jre21_dir(&app);
     tokio::task::spawn_blocking(move || java::detect(jre_dir))
         .await
         .unwrap_or(JavaInfo {

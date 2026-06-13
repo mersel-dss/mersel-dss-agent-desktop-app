@@ -51,8 +51,8 @@ src-tauri/src/               Backend (Rust)
   http/                      agent & verifier REST istemcileri
   commands/                  Frontend'e açılan Tauri komutları + otomatik kurulum
 
-src-tauri/resources/jre/     Paketlenmiş JRE 1.8 (build'de `pnpm fetch-jre` ile doldurulur)
-scripts/fetch-jre.mjs        Platforma özel Temurin JRE 8 indirme/normalizasyon
+src-tauri/resources/jre21/   Paketlenmiş JRE 21 — tüm servisler (build'de `pnpm fetch-jre` ile doldurulur)
+scripts/fetch-jre.mjs        Platforma özel Temurin JRE 21 indirme/normalizasyon
 ```
 
 Bağımlılık yönü her zaman içeri doğrudur: `presentation → application → domain`, `infrastructure → domain`. Her dosya ~300-500 satır sınırında tutulur.
@@ -61,7 +61,7 @@ Bağımlılık yönü her zaman içeri doğrudur: `presentation → application 
 
 - Node 18+ ve **pnpm**
 - **Rust** (stable) + platform Tauri ön koşulları
-- Geliştirme sırasında sistemde **Java 8+** (paket build'inde JRE gömülür; geliştirmede sistem Java'sı kullanılır)
+- Geliştirme sırasında sistemde **Java 21+** önerilir (paket build'inde JRE 21 gömülür; geliştirmede sistem Java'sı kullanılır)
 
 ## Geliştirme
 
@@ -71,16 +71,16 @@ pnpm tauri dev      # uygulamayı geliştirme modunda aç (sistem Java'sını ku
 pnpm build          # tsc + vite (frontend tip kontrolü/derleme)
 ```
 
-> Geliştirmede paketlenmiş JRE'yi denemek için `MERSEL_JRE_HOME` ortam değişkenini
+> Geliştirmede paketlenmiş JRE'yi denemek için `MERSEL_JRE21_HOME` ortam değişkenini
 > bir JRE kök dizinine (içinde `bin/` olan) ayarlayabilirsiniz.
 
 ## Dağıtılabilir paket üretimi (installer)
 
 Her platformda **kendi** üzerinde build alınır (cross-compile değil). Önce o platforma
-ait JRE 1.8'i indirip gömün, sonra paketleyin:
+ait JRE 21'i indirip gömün, sonra paketleyin:
 
 ```bash
-pnpm fetch-jre      # host platform/mimari için Temurin JRE 8 indirir → src-tauri/resources/jre
+pnpm fetch-jre      # host platform/mimari için Temurin JRE 21 indirir → src-tauri/resources/jre21
 pnpm tauri build    # platforma özel installer üretir
 ```
 

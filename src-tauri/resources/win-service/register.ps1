@@ -27,7 +27,7 @@ function Write-Log([string]$m) { Write-Output "[mersel-winsvc] $m" }
 # --- Yollar ----------------------------------------------------------------
 $WinSW       = Join-Path $InstallDir 'win-service\WinSW.exe'
 $ServicesDir = Join-Path $InstallDir 'services'
-$Jre8        = Join-Path $InstallDir 'jre\bin\java.exe'
+# Artık TEK JRE gömülüyor: Java 21 (tüm Java servisleri bunu kullanır).
 $Jre21       = Join-Path $InstallDir 'jre21\bin\java.exe'
 
 # LocalSystem servisinin yazabileceği kalıcı kök (loglar, XSLT asset'leri, WinSW).
@@ -54,7 +54,7 @@ $BaseJvm = @('-Djava.awt.headless=true', '-XX:TieredStopAtLevel=1', '-Xshare:aut
 # 'native' → .NET self-contained Web.exe (html-to-pdf).
 $Services = @(
   @{
-    Kind    = 'agent'; Type = 'java'; Port = 15212; Java = $Jre8;
+    Kind    = 'agent'; Type = 'java'; Port = 15212; Java = $Jre21;
     Display = 'Mersel İmzamatik - İmzalama Servisi';
     AppArgs = @(
       '--mersel.signer.ui.enabled=false',
@@ -65,7 +65,7 @@ $Services = @(
     Env = @{ 'MERSEL_AGENT_UI' = 'false'; 'MERSEL_AGENT_UI_SPLASH' = 'false' }
   },
   @{
-    Kind    = 'verifier'; Type = 'java'; Port = 8086; Java = $Jre8;
+    Kind    = 'verifier'; Type = 'java'; Port = 8086; Java = $Jre21;
     Display = 'Mersel İmzamatik - Doğrulama Servisi';
     AppArgs = @(); Env = @{}
   },

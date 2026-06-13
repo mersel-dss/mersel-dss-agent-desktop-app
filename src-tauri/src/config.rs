@@ -230,25 +230,18 @@ fn bundled_jre_in(app: &AppHandle, env_var: &str, subdir: &str) -> Option<PathBu
     }
 }
 
-/// Uygulamayla paketlenmiş **Java 8** JRE kök dizinini çözer (imza/doğrulama
-/// servisleri için). Override: `MERSEL_JRE_HOME`, paket: `<resource_dir>/jre`.
-pub fn bundled_jre_dir(app: &AppHandle) -> Option<PathBuf> {
-    bundled_jre_in(app, "MERSEL_JRE_HOME", "jre")
-}
-
-/// Uygulamayla paketlenmiş **Java 21** JRE kök dizinini çözer (XSLT önizleme
-/// servisi için). Override: `MERSEL_JRE21_HOME`, paket: `<resource_dir>/jre21`.
+/// Uygulamayla paketlenmiş **Java 21** JRE kök dizinini çözer (TÜM servisler için).
+/// Override: `MERSEL_JRE21_HOME`, paket: `<resource_dir>/jre21`.
 pub fn bundled_jre21_dir(app: &AppHandle) -> Option<PathBuf> {
     bundled_jre_in(app, "MERSEL_JRE21_HOME", "jre21")
 }
 
-/// Verilen minimum Java major sürümünü karşılayabilecek **tercih edilen**
-/// paketli JRE dizinini döner: 8'den büyük gereksinimlerde Java 21 paketi,
-/// aksi hâlde Java 8 paketi. Paket yoksa `None` (çağıran sistem Java'sına düşer).
-pub fn bundled_jre_dir_for(app: &AppHandle, min_java_major: u32) -> Option<PathBuf> {
-    if min_java_major > 8 {
-        bundled_jre21_dir(app)
-    } else {
-        bundled_jre_dir(app)
-    }
+/// Servis için tercih edilen paketli JRE dizinini döner. Artık TEK runtime
+/// gömülüyor: **Java 21**. agent/verifier (Spring Boot 2.7) kendi JAXB'lerini
+/// taşır, BouncyCastle jdk18on ve IAIK PKCS#11 (JNI) kullanır → Java 21'de de
+/// çalışırlar; bu yüzden boyut için ayrı Java 8 paketi kaldırıldı. `min_java_major`
+/// yalnız uyumluluk eşiği olarak kullanılır (21 ≥ tüm gereksinimler). Paket yoksa
+/// `None` (çağıran sistem Java'sına düşer).
+pub fn bundled_jre_dir_for(app: &AppHandle, _min_java_major: u32) -> Option<PathBuf> {
+    bundled_jre21_dir(app)
 }
