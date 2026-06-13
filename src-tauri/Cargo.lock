@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "mersel-dss-agent-desktop"
-version = "0.1.17"
+version = "0.1.18"
 dependencies = [
  "block2",
  "flate2",

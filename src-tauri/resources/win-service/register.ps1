@@ -1,6 +1,12 @@
-#requires -version 3
+﻿#requires -version 3
 <#
   Mersel İmzamatik — Windows Service KAYIT scripti.
+
+  ⚠ KODLAMA: Bu dosya UTF-8 *BOM ile* kaydedilmelidir. NSIS bunu Windows
+  PowerShell 5.1 (`powershell.exe -File`) ile çalıştırır; PS 5.1 BOM yoksa
+  script'i sistem ANSI kod sayfası (cp1254) sanıp Türkçe servis adı
+  literal'lerini (örn. 'İmzamatik', 'Dönüştürme') PARSE anında bozar ve
+  services.msc'de mojibake ("Ä°mzamatik") görünür. BOM'u SİLMEYİN.
 
   NSIS installer'ın POSTINSTALL hook'undan (admin/UAC ile) çağrılır. Gömülü JRE +
   servis jar'larını WinSW ile GERÇEK Windows Service'lerine sarmalar:

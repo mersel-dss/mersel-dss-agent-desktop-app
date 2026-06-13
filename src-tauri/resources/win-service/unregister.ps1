@@ -1,4 +1,4 @@
-#requires -version 3
+﻿#requires -version 3
 <#
   Mersel İmzamatik — Windows Service KALDIRMA scripti.
 
