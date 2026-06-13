@@ -55,6 +55,23 @@ function r2Key(kind, tag, name) {
   return `services/${kind}/${tag}/${name}`;
 }
 
+/**
+ * Bu asset uygulamanın GERÇEKTEN indirdiği bir asset mi? Yalnız bunları aynalarız.
+ * (src-tauri/src/config.rs'teki seçim mantığıyla uyumlu.) Servis repoları kendi
+ * bağımsız kurulumlarını (.dmg/.AppImage/.exe), SBOM'ları, checksum'ları da
+ * yayınlar; bunlar masaüstü uygulamasınca KULLANILMAZ — aynalamayız (boşa
+ * depolama/işlem olmasın, ücretsiz katman korunsun).
+ *   • agent/verifier/xslt (Java): yalnız `*.jar`
+ *   • html-to-pdf (native): yalnız platform paketleri (win-x64.zip / osx-arm64.tar.gz / linux-x64.tar.gz)
+ */
+function shouldMirror(kind, name) {
+  if (kind === "html-to-pdf") {
+    return /-win-x64\.zip$|-osx-arm64\.tar\.gz$|-linux-x64\.tar\.gz$/.test(name);
+  }
+  // agent / verifier / xslt → Spring Boot fat-jar.
+  return name.endsWith(".jar");
+}
+
 /** Nesne R2'de zaten var mı? (head-object — yetkili, cache'siz kontrol) */
 function existsOnR2(key) {
   try {
@@ -78,6 +95,7 @@ function mirrorToR2(kind, entry) {
   if (!R2.enabled || !entry?.assets?.length) return;
   const tag = entry.tag_name || "untagged";
   for (const asset of entry.assets) {
+    if (!shouldMirror(kind, asset.name)) continue; // uygulamanın indirmediği asset'i aynalama
     const key = r2Key(kind, tag, asset.name);
     const publicUrl = `${R2.base}/${key}`;
     try {
