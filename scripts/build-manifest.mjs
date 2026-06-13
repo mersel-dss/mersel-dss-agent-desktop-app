@@ -14,10 +14,110 @@
  */
 
 import { writeFile, mkdir } from "node:fs/promises";
+import { rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const TOKEN = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "";
 const PAGES_URL =
   "https://mersel-dss.github.io/mersel-dss-agent-desktop-app/manifest.json";
+
+// ── Cloudflare R2 aynası (opsiyonel) ───────────────────────────────────────
+// Tanımlıysa servis asset'leri R2'ye aynalanır ve manifest'teki indirme URL'leri
+// R2 tabanına yeniden yazılır (TR'den hızlı indirme, ücretsiz egress). Tanımlı
+// değilse hiçbir şey yapılmaz; URL'ler GitHub'da kalır.
+const R2 = {
+  bucket: process.env.R2_BUCKET || "",
+  base: (process.env.R2_PUBLIC_BASE || "").replace(/\/$/, ""),
+  endpoint: process.env.R2_ACCOUNT_ID
+    ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
+    : "",
+};
+R2.enabled = !!(
+  process.env.R2_ACCESS_KEY_ID &&
+  process.env.R2_SECRET_ACCESS_KEY &&
+  R2.bucket &&
+  R2.base &&
+  R2.endpoint
+);
+
+/** Asset adından kabaca content-type tahmini (cache/serve için). */
+function guessContentType(name) {
+  if (name.endsWith(".jar")) return "application/java-archive";
+  if (name.endsWith(".zip")) return "application/zip";
+  if (name.endsWith(".tar.gz") || name.endsWith(".tgz")) return "application/gzip";
+  return "application/octet-stream";
+}
+
+/** R2 nesne anahtarı: services/<kind>/<tag>/<dosya>. */
+function r2Key(kind, tag, name) {
+  return `services/${kind}/${tag}/${name}`;
+}
+
+/** Nesne R2'de zaten var mı? (head-object — yetkili, cache'siz kontrol) */
+function existsOnR2(key) {
+  try {
+    execFileSync(
+      "aws",
+      ["s3api", "head-object", "--bucket", R2.bucket, "--key", key, "--endpoint-url", R2.endpoint],
+      { stdio: "ignore" },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Bir servisin asset'lerini R2'ye aynalar (idempotent) ve manifest girdisindeki
+ * `browser_download_url`'leri R2 public URL'ine yeniden yazar. En iyi çabayla:
+ * bir asset aynalanamazsa o asset'in GitHub URL'i korunur (kırılmaz).
+ */
+function mirrorToR2(kind, entry) {
+  if (!R2.enabled || !entry?.assets?.length) return;
+  const tag = entry.tag_name || "untagged";
+  for (const asset of entry.assets) {
+    const key = r2Key(kind, tag, asset.name);
+    const publicUrl = `${R2.base}/${key}`;
+    try {
+      if (!existsOnR2(key)) {
+        const tmp = join(tmpdir(), `r2-${Date.now()}-${asset.name}`);
+        // GitHub asset CDN'i (objects.githubusercontent.com) imzalı yönlendirir;
+        // ekstra Authorization başlığı imzayı bozabileceğinden kimliksiz indiririz
+        // (public repolar için yeterli).
+        execFileSync("curl", ["-fSL", "-o", tmp, asset.browser_download_url], {
+          stdio: "inherit",
+        });
+        execFileSync(
+          "aws",
+          [
+            "s3",
+            "cp",
+            tmp,
+            `s3://${R2.bucket}/${key}`,
+            "--endpoint-url",
+            R2.endpoint,
+            "--cache-control",
+            "public, max-age=31536000, immutable",
+            "--content-type",
+            guessContentType(asset.name),
+          ],
+          { stdio: "inherit" },
+        );
+        rmSync(tmp, { force: true });
+        console.log(`    ⇪ R2'ye aynalandı: ${key}`);
+      } else {
+        console.log(`    = R2'de mevcut: ${key}`);
+      }
+      asset.browser_download_url = publicUrl; // manifest'i R2'ye çevir
+    } catch (e) {
+      console.warn(
+        `    ! R2 ayna başarısız (${key}): ${String(e?.message ?? e)} → GitHub URL korunuyor`,
+      );
+    }
+  }
+}
 
 // kind -> owner/repo (src-tauri/src/config.rs ile birebir aynı olmalı)
 const SERVICES = {
@@ -90,6 +190,8 @@ for (const [kind, repo] of Object.entries(SERVICES)) {
     console.log(
       `✓ ${kind} → ${services[kind].tag_name} (${services[kind].assets.length} asset)`,
     );
+    // Asset'leri R2'ye aynala + manifest URL'lerini R2'ye yaz (R2 tanımlıysa).
+    mirrorToR2(kind, services[kind]);
   } catch (e) {
     const msg = String(e?.message ?? e);
     if (previous[kind]) {
