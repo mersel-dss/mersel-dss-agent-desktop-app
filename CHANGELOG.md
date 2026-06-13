@@ -7,6 +7,15 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ## [Unreleased]
 
+## [0.1.22] - 2026-06-13
+
+### Değiştirildi
+
+- **Otomatik güncelleme artık R2'den iniyor.** Updater'ın birincil ucu Cloudflare
+  R2 (`latest.json`) olarak ayarlandı; GitHub Release yedek uç olarak korunuyor.
+  Böylece güncelleme indirmesi Cloudflare edge'inden (TR'ye yakın) hızlı + ücretsiz
+  egress ile gelir, R2 erişilemezse GitHub'a düşer.
+
 ## [0.1.21] - 2026-06-13
 
 ### Eklendi
