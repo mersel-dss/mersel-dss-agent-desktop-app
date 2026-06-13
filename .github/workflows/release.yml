@@ -60,6 +60,14 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
+      # jlink ile minimal runtime üretmek için JDK 21 (jmods + jlink dahil).
+      # build-jre bunu JAVA_HOME üzerinden bulur; runner'da indirme yapmaz.
+      - name: JDK 21 (jlink için)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
@@ -67,8 +75,10 @@ jobs:
       - name: Bağımlılıkları kur
         run: pnpm install --frozen-lockfile
 
-      - name: Platforma özel JRE'yi göm (yalnız Java 21 — tüm servisler)
-        run: pnpm fetch-jre
+      # jlink ile servislerin kullandığı modüllerden MİNİMAL Java 21 runtime üret
+      # (~57MB; tam JRE ~151MB). Platforma özgü: her runner kendi jre21'ini kurar.
+      - name: Minimal Java 21 runtime'ı üret (jlink) ve göm
+        run: pnpm build-jre
 
       # Java servislerinin (agent/verifier/xslt) EN GÜNCEL jar'larını installer'a
       # göm. Sürüm bu build anına KİLİTLENİR (services.lock.json); çalışma anında

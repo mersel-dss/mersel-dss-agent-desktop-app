@@ -51,8 +51,9 @@ src-tauri/src/               Backend (Rust)
   http/                      agent & verifier REST istemcileri
   commands/                  Frontend'e açılan Tauri komutları + otomatik kurulum
 
-src-tauri/resources/jre21/   Paketlenmiş JRE 21 — tüm servisler (build'de `pnpm fetch-jre` ile doldurulur)
-scripts/fetch-jre.mjs        Platforma özel Temurin JRE 21 indirme/normalizasyon
+src-tauri/resources/jre21/   jlink ile üretilen MİNİMAL Java 21 runtime — tüm servisler (build'de `pnpm build-jre` ile doldurulur, ~57MB)
+scripts/build-jre.mjs        jdeps modül setiyle jlink minimal runtime üretimi (önerilen)
+scripts/fetch-jre.mjs        Tam Temurin JRE 21 indirme (eski/yedek yol)
 ```
 
 Bağımlılık yönü her zaman içeri doğrudur: `presentation → application → domain`, `infrastructure → domain`. Her dosya ~300-500 satır sınırında tutulur.
@@ -77,12 +78,16 @@ pnpm build          # tsc + vite (frontend tip kontrolü/derleme)
 ## Dağıtılabilir paket üretimi (installer)
 
 Her platformda **kendi** üzerinde build alınır (cross-compile değil). Önce o platforma
-ait JRE 21'i indirip gömün, sonra paketleyin:
+ait minimal Java 21 runtime'ı jlink ile üretip gömün, sonra paketleyin:
 
 ```bash
-pnpm fetch-jre      # host platform/mimari için Temurin JRE 21 indirir → src-tauri/resources/jre21
+pnpm build-jre      # jlink ile MİNİMAL Java 21 runtime üretir → src-tauri/resources/jre21 (~57MB)
 pnpm tauri build    # platforma özel installer üretir
 ```
+
+> `build-jre`, jlink için bir **JDK 21** ister: önce `--jdk <home>` / `JAVA_HOME` /
+> PATH'teki `jlink` denenir, hiçbiri yoksa Temurin JDK 21 indirilir (Azul Zulu yedeği).
+> jlink platforma özgüdür; her runner kendi mimarisi için native runtime üretir.
 
 Üretilen installer formatları:
 
@@ -92,9 +97,9 @@ pnpm tauri build    # platforma özel installer üretir
 | macOS           | `.app` + `.dmg`           |
 | Linux (Ubuntu)  | `.deb` + `.AppImage`      |
 
-> JRE'siz mimariler: Temurin **JRE 8 macOS aarch64** ve **Windows aarch64** yoktur;
-> `fetch-jre` bu durumda otomatik **x64**'e düşer (Apple Silicon'da Rosetta 2,
-> Windows'ta x64 emülasyonu ile çalışır).
+> Runtime artık tek sürümdür: **Java 21**. `build-jre` yalnız servislerin kullandığı
+> modülleri (PKCS#11, EC, `java.xml.crypto`, Türkçe locale/charset dahil) jlink ile
+> paketler; tam JRE'ye (~151MB) göre ~2.6 kat küçüktür (~57MB).
 
 ### Otomatik güncelleme (updater) imzalama
 

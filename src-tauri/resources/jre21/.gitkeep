@@ -1,2 +1,3 @@
-Paketlenmiş JRE 21 dizini. İçerik `pnpm fetch-jre` ile doldurulur ve
-.gitignore ile sürüm kontrolünden hariç tutulur; yalnızca bu dosya izlenir.
+jlink ile üretilen minimal Java 21 runtime dizini. İçerik
+`pnpm build-jre` ile doldurulur ve .gitignore ile hariç tutulur; yalnız bu
+dosya izlenir.

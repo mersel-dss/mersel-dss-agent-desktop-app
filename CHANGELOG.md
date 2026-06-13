@@ -7,6 +7,8 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ## [Unreleased]
 
+## [0.1.20] - 2026-06-13
+
 ### Düzeltildi
 
 - **Windows güncelleme "Error opening file for writing: …\\jre21\\bin\\extnet.dll"
@@ -20,6 +22,16 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ### Değiştirildi
 
+- **Gömülü Java runtime jlink ile ~2.6 kat küçüldü (~151MB → ~57MB).** Tam Temurin
+  JRE 21 yerine, servislerin (agent/verifier/xslt) gerçekten kullandığı modüllerden
+  `jlink` ile özel bir runtime üretiliyor. Modül seti `jdeps` ile çıkarıldı; reflection
+  ile yüklenen ve jdeps'in göremediği modüller elle eklendi: `jdk.crypto.cryptoki`
+  (PKCS#11 / mali mühür), `jdk.crypto.ec`, `jdk.localedata` + `jdk.charsets` (Türkçe
+  locale ve `windows-1254`/`ISO-8859-9`), `jdk.security.auth`, `jdk.zipfs`,
+  `java.xml.crypto` (XAdES). Yeni `scripts/build-jre.mjs` (`pnpm build-jre`) JAVA_HOME/
+  PATH'teki JDK 21 ile jlink çalıştırır; yoksa indirir. CI her platformda native runtime
+  üretir. İmza+doğrulama+XSLT+Türkçe biçimlendirme minimal runtime'da test edilerek
+  doğrulandı.
 - **Genel Bakış servisleri tablo yerine kart ızgarasında.** Her servis; ikon, durum,
   port/sürüm çipleri, üstte ince durum şeridi ve hover gölgesiyle modern bir kartta
   gösterilir. Her karta "**ne için kullanılır**" odaklı sade bir açıklama eklendi.
