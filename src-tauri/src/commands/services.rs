@@ -362,18 +362,23 @@ async fn launch_service(app: &AppHandle, kind: ServiceKind) -> AppResult<u32> {
         }
         ServiceRuntime::NativePackage { .. } => {
             let executable_path = resolve_native_launch(app, kind)?;
+            // Yazılabilir cwd (gömülü exe salt-okunur olabilir): Playwright/loglar buraya.
+            let work_dir = config::jars_dir(&data_dir, kind);
+            let _ = tokio::fs::create_dir_all(&work_dir).await;
             let state = app.state::<AppState>();
             let mut manager = state.manager.lock().await;
-            manager.start_native(&descriptor, &executable_path, port, Some(&log_path))
+            manager.start_native(&descriptor, &executable_path, port, Some(&work_dir), Some(&log_path))
         }
         ServiceRuntime::NativeSingleFile { .. } => {
             let executable_path = config::single_file_binary_path(&data_dir, kind);
             if !executable_path.exists() {
                 return Err(AppError::JarNotFound(executable_path.display().to_string()));
             }
+            let work_dir = config::jars_dir(&data_dir, kind);
+            let _ = tokio::fs::create_dir_all(&work_dir).await;
             let state = app.state::<AppState>();
             let mut manager = state.manager.lock().await;
-            manager.start_native(&descriptor, &executable_path, port, Some(&log_path))
+            manager.start_native(&descriptor, &executable_path, port, Some(&work_dir), Some(&log_path))
         }
     }
 }
@@ -441,22 +446,28 @@ pub(crate) async fn build_launch_spec(app: &AppHandle, kind: ServiceKind) -> App
         }
         ServiceRuntime::NativePackage { .. } | ServiceRuntime::NativeSingleFile { .. } => {
             let exe = resolve_native_launch(app, kind)?;
-            let work_dir = exe
-                .parent()
-                .map(|p| p.to_path_buf())
-                .unwrap_or_else(|| config::jars_dir(&data_dir, kind));
-
-            let mut envs = vec![(
-                "ASPNETCORE_URLS".to_string(),
-                format!("http://127.0.0.1:{port}"),
-            )];
+            // cwd DAİMA yazılabilir veri dizini olur (gömülü exe .app/.deb içinde
+            // salt-okunur olabilir; Windows register.ps1'in ProgramData yaklaşımıyla
+            // parite). Playwright Chromium'u + .NET ekstraksiyonu buraya yazar.
+            let work_dir = config::jars_dir(&data_dir, kind);
+            let _ = tokio::fs::create_dir_all(&work_dir).await;
             let browsers = work_dir.join("ms-playwright");
-            if browsers.exists() {
-                envs.push((
+            let _ = tokio::fs::create_dir_all(&browsers).await;
+
+            let envs = vec![
+                (
+                    "ASPNETCORE_URLS".to_string(),
+                    format!("http://127.0.0.1:{port}"),
+                ),
+                (
                     "PLAYWRIGHT_BROWSERS_PATH".to_string(),
                     browsers.display().to_string(),
-                ));
-            }
+                ),
+                (
+                    "DOTNET_BUNDLE_EXTRACT_BASE_DIR".to_string(),
+                    work_dir.join("dotnet-extract").display().to_string(),
+                ),
+            ];
 
             Ok(LaunchSpec {
                 program: exe.display().to_string(),

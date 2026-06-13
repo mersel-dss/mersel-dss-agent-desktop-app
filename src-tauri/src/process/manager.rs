@@ -155,6 +155,7 @@ impl ServiceManager {
         descriptor: &ServiceDescriptor,
         executable_path: &Path,
         port: u16,
+        work_dir: Option<&Path>,
         launch_log_path: Option<&Path>,
     ) -> AppResult<u32> {
         if self.is_running(descriptor.kind) {
@@ -187,12 +188,17 @@ impl ServiceManager {
             command.stderr(Stdio::null());
         }
 
-        if let Some(dir) = executable_path.parent() {
+        // Çalışma dizini: gömülü native salt-okunur paket içinde (.app/.deb) olabilir;
+        // bu yüzden YAZILABİLİR bir work_dir verildiyse onu kullan (Windows
+        // register.ps1'in ProgramData yaklaşımıyla parite). Verilmezse exe'nin
+        // yanını kullan (indirilmiş native için yazılabilir). Playwright Chromium'u
+        // bu dizine indirir → PLAYWRIGHT_BROWSERS_PATH daima yazılabilir olmalı.
+        if let Some(dir) = work_dir.or_else(|| executable_path.parent()) {
+            let _ = std::fs::create_dir_all(dir);
             command.current_dir(dir);
             let browsers = dir.join("ms-playwright");
-            if browsers.exists() {
-                command.env("PLAYWRIGHT_BROWSERS_PATH", browsers);
-            }
+            let _ = std::fs::create_dir_all(&browsers);
+            command.env("PLAYWRIGHT_BROWSERS_PATH", &browsers);
         }
 
         #[cfg(windows)]

@@ -73,7 +73,8 @@ jobs:
       # Java servislerinin (agent/verifier/xslt) EN GÜNCEL jar'larını installer'a
       # göm. Sürüm bu build anına KİLİTLENİR (services.lock.json); çalışma anında
       # GitHub'dan indirme gerekmez (kurumsal proxy/çevrimdışı ortamda da çalışır).
-      # Token rate-limit'i aşmak için. `.NET html-to-pdf` bilinçli olarak gömülmez.
+      # Token rate-limit'i aşmak için. (`.NET html-to-pdf` aşağıda platforma özel
+      # adımlarla TÜM platformlara gömülür — tam parite.)
       - name: Java servislerini göm (agent + verifier + xslt)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -88,11 +89,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm fetch-winsw
 
-      # .NET html-to-pdf servisini de Windows installer'a göm (Web.exe + Playwright
-      # JS sürücüsü). Yalnız Windows'ta: installer bunu da WinSW ile gerçek Windows
-      # Service'i yapar. ~80MB sıkıştırılmış; Chromium ikilisi pakette YOK, servis
-      # ilk PDF'te Playwright ile indirir (yazılabilir ProgramData yoluna).
-      - name: html-to-pdf'i göm (Windows Service için)
+      # .NET html-to-pdf servisini installer'a göm — TÜM platformlar (tam parite).
+      # ~80MB; Chromium ikilisi pakette YOK, servis ilk PDF'te Playwright ile
+      # yazılabilir veri dizinine indirir. Windows'ta installer bunu WinSW ile
+      # gerçek Windows Service yapar; macOS/Linux'ta uygulama LaunchAgent/systemd
+      # olarak kaydeder.
+
+      # Windows: win-x64.zip → resources/services/html-to-pdf
+      - name: html-to-pdf'i göm (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         env:
@@ -110,6 +114,49 @@ jobs:
             throw "html-to-pdf paketinde Web.exe bulunamadı"
           }
           Write-Host "html-to-pdf gömüldü → $dest"
+
+      # macOS (Apple Silicon): osx-arm64.tar.gz → resources/services/html-to-pdf.
+      # İçindeki Mach-O ikilileri bir sonraki adımda (sign-bundled-natives.sh)
+      # hardened runtime + .NET entitlements ile imzalanır (notarization şartı).
+      - name: html-to-pdf'i göm (macOS)
+        if: runner.os == 'macOS'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          dest="src-tauri/resources/services/html-to-pdf"
+          mkdir -p "$dest"
+          tmp="$(mktemp -d)"
+          gh release download --repo mersel-os/html-to-pdf --pattern "*-osx-arm64.tar.gz" --dir "$tmp" --clobber
+          tarball="$(ls "$tmp"/*-osx-arm64.tar.gz 2>/dev/null | head -1)"
+          [ -n "$tarball" ] || { echo "html-to-pdf osx-arm64.tar.gz indirilemedi"; exit 1; }
+          tar -xf "$tarball" -C "$dest"
+          if [ -z "$(find "$dest" -type f -name 'Web' | head -1)" ]; then
+            echo "html-to-pdf paketinde Web bulunamadı"; exit 1
+          fi
+          find "$dest" -type f -name 'Web' -exec chmod +x {} \;
+          xattr -cr "$dest" 2>/dev/null || true
+          echo "html-to-pdf gömüldü → $dest"
+
+      # Linux (x64): linux-x64.tar.gz → resources/services/html-to-pdf.
+      - name: html-to-pdf'i göm (Linux)
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          dest="src-tauri/resources/services/html-to-pdf"
+          mkdir -p "$dest"
+          tmp="$(mktemp -d)"
+          gh release download --repo mersel-os/html-to-pdf --pattern "*-linux-x64.tar.gz" --dir "$tmp" --clobber
+          tarball="$(ls "$tmp"/*-linux-x64.tar.gz 2>/dev/null | head -1)"
+          [ -n "$tarball" ] || { echo "html-to-pdf linux-x64.tar.gz indirilemedi"; exit 1; }
+          tar -xf "$tarball" -C "$dest"
+          if [ -z "$(find "$dest" -type f -name 'Web' | head -1)" ]; then
+            echo "html-to-pdf paketinde Web bulunamadı"; exit 1
+          fi
+          find "$dest" -type f -name 'Web' -exec chmod +x {} \;
+          echo "html-to-pdf gömüldü → $dest"
 
       # macOS notarization, .app içindeki jar'ların İÇİNDEKİ Mach-O native'leri de
       # tarar. `agent` jar'ı ad-hoc imzalı bir libpkcs11wrapper.jnilib taşır;

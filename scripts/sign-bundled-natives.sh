@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
-# macOS notarization için: GÖMÜLÜ Java servis jar'larının İÇİNDEKİ imzasız
-# (ad-hoc/linker-signed) Mach-O native kütüphanelerini Developer ID + secure
-# timestamp ile YENİDEN İMZALAR.
+# macOS notarization için: GÖMÜLÜ servislerin Mach-O native'lerini Developer ID +
+# secure timestamp ile imzalar. İki kaynak:
+#   1) Java servis jar'larının İÇİNDEKİ imzasız (ad-hoc/linker-signed) .jnilib/.dylib
+#      kütüphaneleri (örn. agent → libpkcs11wrapper.jnilib) — yeniden imzalanıp
+#      nested jar STORED biçimde geri gömülür.
+#   2) html-to-pdf (.NET self-contained + Playwright) LOOSE Mach-O ikilileri
+#      (apphost `Web`, `*.dylib`, `node` ...). Bunlar hardened runtime + .NET JIT
+#      entitlements ile imzalanır (yoksa notarization geçse bile uygulama JIT
+#      yüzünden çalışmaz).
 #
 # Neden: Apple notary, .app içine giren jar'ların içini de açıp tarar ve her
 # Mach-O binary'nin Developer ID imzalı + timestamp'li olmasını ister. `agent`
@@ -49,6 +55,34 @@ sign_one() {
     codesign --force -s - "$1" || die "codesign başarısız: $1"
   else
     codesign --force --timestamp --options runtime -s "$IDENTITY" "$1" \
+      || die "codesign başarısız: $1"
+  fi
+}
+
+# .NET (html-to-pdf) Mach-O ikilileri için entitlements. .NET, JIT (R2R + dinamik
+# kod üretimi) kullandığından hardened runtime altında bu izinler olmadan çöker;
+# disable-library-validation ise apphost'un gömülü coreclr/Playwright dylib'lerini
+# yüklemesini garanti eder.
+ENT="$(mktemp -t dotnet-ent).plist"
+cat > "$ENT" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>com.apple.security.cs.allow-jit</key><true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key><true/>
+  <key>com.apple.security.cs.disable-library-validation</key><true/>
+</dict></plist>
+PLIST
+
+# html-to-pdf Mach-O imzası: hardened runtime + .NET entitlements. (Entitlements
+# dylib'lerde sistemce yok sayılır ama zarar vermez; tek geçişte hepsine uygulanır.)
+sign_runtime_ent() {
+  if [ "$IDENTITY" = "-" ]; then
+    codesign --force --options runtime --entitlements "$ENT" -s - "$1" \
+      || die "codesign başarısız: $1"
+  else
+    codesign --force --timestamp --options runtime --entitlements "$ENT" -s "$IDENTITY" "$1" \
       || die "codesign başarısız: $1"
   fi
 }
@@ -134,7 +168,27 @@ EOF
   found_any=1
 done
 
+# html-to-pdf (.NET self-contained + Playwright) — Tauri .app içine giren LOOSE
+# Mach-O ikilileri. Notary HEPSİNİN Developer ID + hardened runtime imzalı
+# olmasını ister; apphost ayrıca .NET JIT entitlements'a ihtiyaç duyar.
+H2P_DIR="$SERVICES_DIR/html-to-pdf"
+if [ -d "$H2P_DIR" ]; then
+  echo "→ html-to-pdf Mach-O ikilileri imzalanıyor ($H2P_DIR)"
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    case "$(file "$f" 2>/dev/null)" in
+      *Mach-O*)
+        echo "  → imzalanıyor: ${f#"$H2P_DIR"/}"
+        sign_runtime_ent "$f"
+        found_any=1
+        ;;
+    esac
+  done <<EOF
+$(find "$H2P_DIR" -type f)
+EOF
+fi
+
 if [ "$found_any" -eq 0 ]; then
-  echo "↪ İmzalanacak gömülü servis jar'ı bulunamadı ($SERVICES_DIR)."
+  echo "↪ İmzalanacak gömülü native bulunamadı ($SERVICES_DIR)."
 fi
 echo "✓ Gömülü native imzalama tamamlandı."
