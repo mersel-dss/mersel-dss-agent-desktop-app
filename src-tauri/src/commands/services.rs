@@ -163,15 +163,46 @@ fn resolve_bundled_artifact(app: &AppHandle, descriptor: &ServiceDescriptor) -> 
     let dir = config::bundled_service_dir(app, descriptor.kind)?;
     match descriptor.runtime {
         ServiceRuntime::Java { .. } => jar::resolve_jar(&dir, descriptor),
-        ServiceRuntime::NativePackage { .. } => {
-            let exe = dir.join("current").join(config::native_executable_name());
-            exe.exists().then_some(exe)
-        }
+        ServiceRuntime::NativePackage { .. } => find_bundled_native_executable(&dir),
         ServiceRuntime::NativeSingleFile { .. } => {
             let exe = dir.join(config::single_file_binary_name());
             exe.exists().then_some(exe)
         }
     }
+}
+
+/// Gömülü native paket dizininde çalıştırılabilir exe'yi (Windows: `Web.exe`)
+/// DAYANIKLI biçimde bulur. Olası düzenler:
+///   • `<dir>/current/<exe>`  (çalışma anında indirilen paketin düzeni)
+///   • `<dir>/<exe>`          (CI installer'a gömerken zip'i köke açar)
+///   • `<dir>/<altklasör>/<exe>` (.NET publish zip'i bazen tek üst klasör içerir)
+/// Bu fonksiyon olmadan gömülü html-to-pdf bulunamayıp `ensure_latest` paketi
+/// gereksiz yere yeniden indiriyordu (zaten kuruluyken ~80MB).
+fn find_bundled_native_executable(dir: &Path) -> Option<PathBuf> {
+    let exe = config::native_executable_name();
+    for candidate in [dir.join("current").join(exe), dir.join(exe)] {
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    // Sınırlı derinlikte (3 seviye) özyinelemeli arama.
+    fn walk(dir: &Path, exe: &str, depth: u8) -> Option<PathBuf> {
+        if depth == 0 {
+            return None;
+        }
+        for entry in std::fs::read_dir(dir).ok()?.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if let Some(found) = walk(&path, exe, depth - 1) {
+                    return Some(found);
+                }
+            } else if path.file_name().and_then(|n| n.to_str()) == Some(exe) {
+                return Some(path);
+            }
+        }
+        None
+    }
+    walk(dir, exe, 3)
 }
 
 /// Bir servisin kullanılacak artifact'ını çözer: ÖNCE gömülü (sürüm-kilitli,
