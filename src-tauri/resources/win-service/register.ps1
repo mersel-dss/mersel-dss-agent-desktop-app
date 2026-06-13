@@ -33,6 +33,15 @@ $Jre21       = Join-Path $InstallDir 'jre21\bin\java.exe'
 # LocalSystem servisinin yazabileceği kalıcı kök (loglar, XSLT asset'leri, WinSW).
 $DataRoot = Join-Path $env:ProgramData 'Mersel\Imzamatik'
 
+# Tanılama günlüğü: kurulum sorunlarını sonradan incelemek için tüm çıktı buraya da
+# yazılır (C:\ProgramData\Mersel\Imzamatik\register.log). Best-effort.
+try {
+  New-Item -ItemType Directory -Force -Path $DataRoot | Out-Null
+  Start-Transcript -Path (Join-Path $DataRoot 'register.log') -Append -Force | Out-Null
+} catch {}
+
+Write-Log "register.ps1 başladı. InstallDir=$InstallDir"
+
 if (-not (Test-Path $WinSW)) {
   Write-Log "WinSW.exe bulunamadı ($WinSW); Windows Service kaydı atlanıyor."
   exit 0
@@ -86,12 +95,12 @@ foreach ($svc in $Services) {
 
   $java = $svc.Java
   if (-not (Test-Path $java)) {
-    Write-Log "$kind: JRE bulunamadı ($java); atlanıyor."
+    Write-Log "${kind}: JRE bulunamadı ($java); atlanıyor."
     continue
   }
   $jar = Find-Jar $kind
   if (-not $jar) {
-    Write-Log "$kind: jar bulunamadı ($ServicesDir\$kind); atlanıyor."
+    Write-Log "${kind}: jar bulunamadı ($ServicesDir\$kind); atlanıyor."
     continue
   }
 
@@ -160,13 +169,16 @@ $envXml  <startmode>Automatic</startmode>
   try { & schtasks.exe /End    /TN $id          2>$null | Out-Null } catch {}
   try { & schtasks.exe /Delete /TN $id /F        2>$null | Out-Null } catch {}
 
-  Write-Log "$kind: kuruluyor ($id) → port $($svc.Port)"
-  & $winswExe install
-  if ($LASTEXITCODE -ne 0) { Write-Log "$kind: WinSW install başarısız (kod $LASTEXITCODE)"; continue }
-  & $winswExe start
-  if ($LASTEXITCODE -ne 0) { Write-Log "$kind: WinSW start başarısız (kod $LASTEXITCODE)" }
-  else { Write-Log "$kind: çalışıyor." }
+  Write-Log "${kind}: kuruluyor ($id) → port $($svc.Port)"
+  $installOut = (& $winswExe install 2>&1 | Out-String).Trim()
+  if ($installOut) { Write-Log "WinSW install çıktı: $installOut" }
+  if ($LASTEXITCODE -ne 0) { Write-Log "${kind}: WinSW install başarısız (kod $LASTEXITCODE)"; continue }
+  $startOut = (& $winswExe start 2>&1 | Out-String).Trim()
+  if ($startOut) { Write-Log "WinSW start çıktı: $startOut" }
+  if ($LASTEXITCODE -ne 0) { Write-Log "${kind}: WinSW start başarısız (kod $LASTEXITCODE)" }
+  else { Write-Log "${kind}: çalışıyor." }
 }
 
 Write-Log "Windows Service kaydı tamamlandı."
+try { Stop-Transcript | Out-Null } catch {}
 exit 0

@@ -24,7 +24,7 @@ foreach ($kind in $Kinds) {
   $winswExe = Join-Path $DataRoot "winsw\$id\$id.exe"
 
   if (Test-Path $winswExe) {
-    Write-Log "$kind: durduruluyor + kaldırılıyor ($id)"
+    Write-Log "${kind}: durduruluyor + kaldırılıyor ($id)"
     try { & $winswExe stop 2>$null | Out-Null } catch {}
     try { & $winswExe uninstall 2>$null | Out-Null } catch {}
   }
