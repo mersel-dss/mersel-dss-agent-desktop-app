@@ -211,3 +211,66 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}
+
+  # ── R2 AYNA ───────────────────────────────────────────────────────────────
+  # GitHub Release yayınlandıktan SONRA (tüm platformlar bitince) installer +
+  # updater artefaktlarını Cloudflare R2'ye aynalar ve `latest.json`'ı R2'ye
+  # işaret edecek biçimde yeniden yazar. Amaç: TR'den indirmeleri hızlandırmak
+  # (R2 egress ücretsiz + Cloudflare edge cache). GitHub release yine durur ve
+  # updater'da YEDEK uç olarak kalır.
+  #
+  # Gerekli repo secret'ları (yoksa iş sessizce no-op olur):
+  #   R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY  → R2 API token (Object R&W)
+  #   R2_ACCOUNT_ID                           → <accountid>.r2.cloudflarestorage.com
+  #   R2_BUCKET                               → bucket adı (örn. imzamatik-releases)
+  #   R2_PUBLIC_BASE                          → herkese açık taban (örn. https://cdn.imzamatik.com)
+  publish-r2:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+    steps:
+      - name: Release'i R2'ye ayna + updater latest.json'ı yeniden yaz
+        if: env.R2_ACCESS_KEY_ID != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          # AWS CLI v2.23+ varsayılan checksum'ları R2 reddediyor; "gerektiğinde"e çek.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_PUBLIC_BASE: ${{ secrets.R2_PUBLIC_BASE }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"; cd "$work"
+          echo "↓ Release asset'leri indiriliyor ($TAG)…"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --clobber
+
+          # latest.json içindeki GitHub indirme URL'lerini R2 tabanına çevir.
+          # GitHub: <prefix>/<tag>/<dosya>  →  R2: <base>/<tag>/<dosya>
+          gh_prefix="https://github.com/${GITHUB_REPOSITORY}/releases/download"
+          base="${R2_PUBLIC_BASE%/}"
+          if [ -f latest.json ]; then
+            sed "s#${gh_prefix}#${base}#g" latest.json > latest.r2.json
+            mv latest.r2.json latest.json
+            echo "── R2 latest.json ──"; cat latest.json
+          else
+            echo "latest.json bulunamadı (includeUpdaterJson?)"; exit 1
+          fi
+
+          # Tüm asset'leri SÜRÜME özel klasöre yükle (immutable; uzun cache).
+          aws s3 cp . "s3://${R2_BUCKET}/${TAG}/" --recursive \
+            --endpoint-url "$R2_ENDPOINT" \
+            --cache-control "public, max-age=31536000, immutable"
+
+          # Updater'ın SABİT ucu: kökteki latest.json (her sürümde güncellenir).
+          aws s3 cp latest.json "s3://${R2_BUCKET}/latest.json" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --content-type application/json \
+            --cache-control "no-cache"
+
+          echo "✓ R2 aynası tamam → ${base}/${TAG}/  (updater: ${base}/latest.json)"

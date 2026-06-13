@@ -7,6 +7,18 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ## [Unreleased]
 
+## [0.1.21] - 2026-06-13
+
+### Eklendi
+
+- **Cloudflare R2 aynası (daha hızlı indirme).** GitHub Release yayınlandıktan
+  sonra çalışan yeni bir CI işi (`publish-r2`), tüm installer + updater
+  artefaktlarını R2'ye aynalar ve `latest.json`'daki indirme URL'lerini R2 tabanına
+  yeniden yazar. R2 egress ücretsizdir ve Cloudflare edge'inden (TR'ye yakın PoP)
+  servis edilir; GitHub Release yine durur ve updater'da yedek uç olarak kalır.
+  Repo secret'ları (`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID`,
+  `R2_BUCKET`, `R2_PUBLIC_BASE`) tanımlı değilse iş sessizce no-op olur.
+
 ## [0.1.20] - 2026-06-13
 
 ### Düzeltildi
