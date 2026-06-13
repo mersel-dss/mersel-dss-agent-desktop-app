@@ -7,6 +7,18 @@ proje [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ## [Unreleased]
 
+## [0.1.23] - 2026-06-14
+
+### Değiştirildi
+
+- **Servis indirmeleri de R2'den (R2 geçişi tamamlandı).** Saatlik manifest
+  workflow'u servis jar'larını (agent/verifier/xslt) ve html-to-pdf platform
+  paketlerini R2'ye aynalayıp manifest URL'lerini R2'ye yazıyor; yalnız
+  uygulamanın gerçekten indirdiği asset'ler aynalanır (servis repolarının
+  bağımsız kurulumları/SBOM/checksum'ları hariç). Böylece installer, oto-güncelleme
+  ve çalışma anı servis indirmelerinin tamamı Cloudflare R2'den (hızlı + ücretsiz
+  egress) iner; her yolda GitHub yedek olarak kalır.
+
 ## [0.1.22] - 2026-06-13
 
 ### Değiştirildi
