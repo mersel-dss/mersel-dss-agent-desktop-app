@@ -50,10 +50,11 @@ if (-not (Test-Path $WinSW)) {
 # Ortak hızlı-başlat JVM bayrakları (fast_start_jvm_args + headless).
 $BaseJvm = @('-Djava.awt.headless=true', '-XX:TieredStopAtLevel=1', '-Xshare:auto')
 
-# Servis tanımları (config.rs ile birebir).
+# Servis tanımları (config.rs ile birebir). Type: 'java' → gömülü JRE + -jar,
+# 'native' → .NET self-contained Web.exe (html-to-pdf).
 $Services = @(
   @{
-    Kind    = 'agent'; Port = 15212; Java = $Jre8;
+    Kind    = 'agent'; Type = 'java'; Port = 15212; Java = $Jre8;
     Display = 'Mersel İmzamatik - İmzalama Servisi';
     AppArgs = @(
       '--mersel.signer.ui.enabled=false',
@@ -64,14 +65,19 @@ $Services = @(
     Env = @{ 'MERSEL_AGENT_UI' = 'false'; 'MERSEL_AGENT_UI_SPLASH' = 'false' }
   },
   @{
-    Kind    = 'verifier'; Port = 8086; Java = $Jre8;
+    Kind    = 'verifier'; Type = 'java'; Port = 8086; Java = $Jre8;
     Display = 'Mersel İmzamatik - Doğrulama Servisi';
     AppArgs = @(); Env = @{}
   },
   @{
-    Kind    = 'xslt'; Port = 8080; Java = $Jre21;
+    Kind    = 'xslt'; Type = 'java'; Port = 8080; Java = $Jre21;
     Display = 'Mersel İmzamatik - Önizleme Servisi';
     AppArgs = @(); Env = @{}  # XSLT asset env'i aşağıda doldurulur
+  },
+  @{
+    Kind    = 'html-to-pdf'; Type = 'native'; Port = 5090;
+    Display = 'Mersel İmzamatik - PDF Dönüştürme Servisi';
+    AppArgs = @(); Env = @{}  # ASPNETCORE_URLS + Playwright env'i aşağıda doldurulur
   }
 )
 
@@ -89,62 +95,105 @@ function Find-Jar([string]$kind) {
   if ($jar) { return $jar.FullName } else { return $null }
 }
 
+# Native servisin (html-to-pdf) çalıştırılabilirini gömülü dizinde arar.
+function Find-Native([string]$kind, [string]$exeName) {
+  $dir = Join-Path $ServicesDir $kind
+  if (-not (Test-Path $dir)) { return $null }
+  $f = Get-ChildItem -Path $dir -Filter $exeName -File -Recurse -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+  if ($f) { return $f.FullName } else { return $null }
+}
+
 foreach ($svc in $Services) {
   $kind = $svc.Kind
+  $type = $svc.Type
   $id   = "MerselImzamatik-$kind"
-
-  $java = $svc.Java
-  if (-not (Test-Path $java)) {
-    Write-Log "${kind}: JRE bulunamadı ($java); atlanıyor."
-    continue
-  }
-  $jar = Find-Jar $kind
-  if (-not $jar) {
-    Write-Log "${kind}: jar bulunamadı ($ServicesDir\$kind); atlanıyor."
-    continue
-  }
 
   $workDir  = Join-Path $DataRoot "services\$kind"
   $logDir   = Join-Path $DataRoot "logs\$kind"
   $winswDir = Join-Path $DataRoot "winsw\$id"
-  New-Item -ItemType Directory -Force -Path $workDir, $logDir, $winswDir | Out-Null
 
-  # XSLT: GİB doğrulama asset'lerini kalıcı dizinde tut + otomatik sync.
+  # Servisin env'i (kopya — kaynak hashtable'a dokunma).
   $env2 = @{}
   foreach ($k in $svc.Env.Keys) { $env2[$k] = $svc.Env[$k] }
-  if ($kind -eq 'xslt') {
-    $assets = Join-Path $workDir 'assets'
-    New-Item -ItemType Directory -Force -Path $assets | Out-Null
-    $env2['XSLT_ASSETS_EXTERNAL_PATH']           = $assets
-    $env2['XSLT_ASSETS_WATCH_ENABLED']           = 'true'
-    $env2['VALIDATION_ASSETS_GIB_SYNC_ENABLED']  = 'true'
-    $env2['VALIDATION_ASSETS_GIB_AUTO_SYNC']     = 'true'
-    $env2['VALIDATION_ASSETS_GIB_SYNC_PATH']     = $assets
+
+  if ($type -eq 'java') {
+    $executable = $svc.Java
+    if (-not (Test-Path $executable)) {
+      Write-Log "${kind}: JRE bulunamadı ($executable); atlanıyor."
+      continue
+    }
+    $jar = Find-Jar $kind
+    if (-not $jar) {
+      Write-Log "${kind}: jar bulunamadı ($ServicesDir\$kind); atlanıyor."
+      continue
+    }
+    $svcWorkDir = $workDir
+
+    # XSLT: GİB doğrulama asset'lerini kalıcı dizinde tut + otomatik sync.
+    if ($kind -eq 'xslt') {
+      $assets = Join-Path $workDir 'assets'
+      New-Item -ItemType Directory -Force -Path $assets | Out-Null
+      $env2['XSLT_ASSETS_EXTERNAL_PATH']           = $assets
+      $env2['XSLT_ASSETS_WATCH_ENABLED']           = 'true'
+      $env2['VALIDATION_ASSETS_GIB_SYNC_ENABLED']  = 'true'
+      $env2['VALIDATION_ASSETS_GIB_AUTO_SYNC']     = 'true'
+      $env2['VALIDATION_ASSETS_GIB_SYNC_PATH']     = $assets
+    }
+
+    # <arguments>: JVM bayrakları + -jar + server ayarları + app argları.
+    $argList = @()
+    $argList += $BaseJvm
+    $argList += '-jar'
+    $argList += ('"{0}"' -f $jar)
+    $argList += ("--server.port={0}" -f $svc.Port)
+    $argList += '--server.address=127.0.0.1'
+    $argList += $svc.AppArgs
+    $arguments = ($argList -join ' ')
+  }
+  elseif ($type -eq 'native') {
+    # .NET self-contained Web.exe (single-file). CWD = exe dizini (ASP.NET content
+    # root + appsettings + .playwright sürücüsü oraya göre çözülür).
+    $executable = Find-Native $kind 'Web.exe'
+    if (-not $executable) {
+      Write-Log "${kind}: Web.exe bulunamadı ($ServicesDir\$kind); atlanıyor."
+      continue
+    }
+    $svcWorkDir = Split-Path $executable -Parent
+
+    # Playwright Chromium'u runtime'da indirir → YAZILABİLİR bir tarayıcı yolu ve
+    # single-file extract dizini ProgramData altında verilir (Program Files salt-okunur).
+    $browsers = Join-Path $workDir 'ms-playwright'
+    $extract  = Join-Path $workDir 'dotnet-extract'
+    New-Item -ItemType Directory -Force -Path $browsers, $extract | Out-Null
+    $env2['ASPNETCORE_URLS']                = ("http://127.0.0.1:{0}" -f $svc.Port)
+    $env2['PLAYWRIGHT_BROWSERS_PATH']       = $browsers
+    $env2['DOTNET_BUNDLE_EXTRACT_BASE_DIR'] = $extract
+
+    $arguments = ''
+  }
+  else {
+    Write-Log "${kind}: bilinmeyen tip '$type'; atlanıyor."
+    continue
   }
 
-  # <arguments> tek satır: JVM bayrakları + -jar + server ayarları + app argları.
-  $argList = @()
-  $argList += $BaseJvm
-  $argList += '-jar'
-  $argList += ('"{0}"' -f $jar)
-  $argList += ("--server.port={0}" -f $svc.Port)
-  $argList += '--server.address=127.0.0.1'
-  $argList += $svc.AppArgs
-  $arguments = ($argList -join ' ')
+  New-Item -ItemType Directory -Force -Path $workDir, $logDir, $winswDir | Out-Null
 
   $envXml = ''
   foreach ($k in $env2.Keys) {
     $envXml += "  <env name=`"$(Esc $k)`" value=`"$(Esc $env2[$k])`"/>`r`n"
   }
 
+  $argXml = if ($arguments) { "  <arguments>$(Esc $arguments)</arguments>`r`n" } else { '' }
+
   $xml = @"
+<?xml version="1.0" encoding="utf-8"?>
 <service>
   <id>$(Esc $id)</id>
   <name>$(Esc $svc.Display)</name>
   <description>Mersel İmzamatik gömülü servisi ($kind). Masaüstü uygulamasıyla birlikte kurulur.</description>
-  <executable>$(Esc $java)</executable>
-  <arguments>$(Esc $arguments)</arguments>
-  <workingdirectory>$(Esc $workDir)</workingdirectory>
+  <executable>$(Esc $executable)</executable>
+$argXml  <workingdirectory>$(Esc $svcWorkDir)</workingdirectory>
 $envXml  <startmode>Automatic</startmode>
   <onfailure action="restart" delay="5 sec"/>
   <stoptimeout>15 sec</stoptimeout>
@@ -159,7 +208,9 @@ $envXml  <startmode>Automatic</startmode>
   $winswExe = Join-Path $winswDir "$id.exe"
   $winswXml = Join-Path $winswDir "$id.xml"
   Copy-Item -Path $WinSW -Destination $winswExe -Force
-  [System.IO.File]::WriteAllText($winswXml, $xml, (New-Object System.Text.UTF8Encoding($false)))
+  # UTF-8 BOM İLE yaz: WinSW/.NET XmlDocument böylece kodlamayı kesin algılar ve
+  # Türkçe karakterler (İ/ğ/Ö) servis adında bozulmaz (aksi halde ANSI sanılıyor).
+  [System.IO.File]::WriteAllText($winswXml, $xml, (New-Object System.Text.UTF8Encoding($true)))
 
   # Idempotent: varsa eskisini düzgünce durdur + kaldır (sürüm güncellemesi).
   try { & $winswExe stop  2>$null | Out-Null } catch {}

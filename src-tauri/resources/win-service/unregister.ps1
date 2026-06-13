@@ -17,7 +17,7 @@ $ErrorActionPreference = 'SilentlyContinue'
 function Write-Log([string]$m) { Write-Output "[mersel-winsvc] $m" }
 
 $DataRoot = Join-Path $env:ProgramData 'Mersel\Imzamatik'
-$Kinds = @('agent', 'verifier', 'xslt')
+$Kinds = @('agent', 'verifier', 'xslt', 'html-to-pdf')
 
 foreach ($kind in $Kinds) {
   $id = "MerselImzamatik-$kind"

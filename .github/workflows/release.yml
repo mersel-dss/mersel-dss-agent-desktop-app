@@ -89,6 +89,29 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm fetch-winsw
 
+      # .NET html-to-pdf servisini de Windows installer'a göm (Web.exe + Playwright
+      # JS sürücüsü). Yalnız Windows'ta: installer bunu da WinSW ile gerçek Windows
+      # Service'i yapar. ~80MB sıkıştırılmış; Chromium ikilisi pakette YOK, servis
+      # ilk PDF'te Playwright ile indirir (yazılabilir ProgramData yoluna).
+      - name: html-to-pdf'i göm (Windows Service için)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dest = "src-tauri/resources/services/html-to-pdf"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          $tmp = Join-Path $env:RUNNER_TEMP 'h2p'
+          gh release download --repo mersel-os/html-to-pdf --pattern "*-win-x64.zip" --dir $tmp --clobber
+          $zip = Get-ChildItem "$tmp/*-win-x64.zip" | Select-Object -First 1
+          if (-not $zip) { throw "html-to-pdf win-x64.zip indirilemedi" }
+          Expand-Archive -Path $zip.FullName -DestinationPath $dest -Force
+          if (-not (Get-ChildItem -Path $dest -Filter 'Web.exe' -Recurse)) {
+            throw "html-to-pdf paketinde Web.exe bulunamadı"
+          }
+          Write-Host "html-to-pdf gömüldü → $dest"
+
       # macOS notarization, .app içindeki jar'ların İÇİNDEKİ Mach-O native'leri de
       # tarar. `agent` jar'ı ad-hoc imzalı bir libpkcs11wrapper.jnilib taşır;
       # imzalanmazsa notarization patlar (v0.1.11 mac build'i bu yüzden çöktü).
